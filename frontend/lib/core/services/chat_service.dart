@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 class ChatService {
-  final String _baseUrl = 'http://10.0.2.2:8000';
+  final String _baseUrl = 'https://zdorovya.onrender.com';
   final Dio _dio = Dio();
   final String _sessionId = Uuid().v4();
 

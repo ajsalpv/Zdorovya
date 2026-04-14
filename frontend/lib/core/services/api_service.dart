@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 
 class ApiService {
-  final String _baseUrl = 'http://10.0.2.2:8000'; // Standard Android Emulator loopback
+  final String _baseUrl = 'https://zdorovya.onrender.com';
   final Dio _dio = Dio();
 
   Future<Map<String, dynamic>> processReport(PlatformFile file) async {
