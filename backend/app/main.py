@@ -54,7 +54,13 @@ async def process_report(
             "data": extracted_data
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        if "429" in error_msg or "ResourceExhausted" in error_msg:
+             raise HTTPException(
+                status_code=429, 
+                detail="Daily AI processing limit reached. Please try again in a few minutes or tomorrow."
+            )
+        raise HTTPException(status_code=500, detail=error_msg)
 
 class ChatRequest(BaseModel):
     message: str
@@ -70,7 +76,13 @@ async def chat_with_copilot(req: ChatRequest):
         return response
     except Exception as e:
         logger.error(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        error_msg = str(e)
+        if "429" in error_msg or "ResourceExhausted" in error_msg:
+             raise HTTPException(
+                status_code=429, 
+                detail="Health Copilot is busy. Please try again in 1 minute."
+            )
+        raise HTTPException(status_code=500, detail=error_msg)
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=settings.port, reload=True)

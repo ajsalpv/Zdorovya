@@ -12,6 +12,7 @@ import 'features/emergency/pages/emergency_page.dart';
 import 'features/health/pages/family_members_page.dart';
 import 'features/medical/pages/medical_vault_page.dart';
 import 'core/services/keep_alive_service.dart';
+import 'core/services/notification_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -21,13 +22,11 @@ void main() async {
   // Initialize Supabase
   await Supabase.initialize(
     url: 'https://jlrzzrhxqvpzrltolkbf.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impscnp6cmh4cXZwenJsdG9sa2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDU0NTQsImV4cCI6MjA5MTY4MTQ1NH0.8Y3-zKl1AZqTolXeDto1aHsvIzu4e0o88q0a4wjeRXM',
+    anonKey: 'sb_publishable_HUvRPGCOGYuspW6vMpsTYw_AhxGPHof',
   );
 
   // Initialize Notifications
-  const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-  const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  await notificationService.init();
 
   // Start Keep-Alive (Ping Render)
   keepAliveService.start();

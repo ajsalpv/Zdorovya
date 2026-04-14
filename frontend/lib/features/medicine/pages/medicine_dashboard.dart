@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/medicine_service.dart';
 import '../../medical/pages/upload_page.dart';
+import 'add_medicine_page.dart';
 import 'package:intl/intl.dart';
 
 class MedicineDashboard extends StatelessWidget {
@@ -32,7 +33,7 @@ class MedicineDashboard extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddMedicinePage())),
         label: const Text('Add Medicine'),
         icon: const Icon(Icons.medication),
       ),

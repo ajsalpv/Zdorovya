@@ -50,6 +50,8 @@ dependencies:
   pdf: ^3.11.3
   printing: ^5.14.3
   path_provider: ^2.1.5
+  android_intent_plus: ^6.0.0
+  flutter_local_notifications_platform_interface: ^8.0.0
 
 dev_dependencies:
   flutter_test:
