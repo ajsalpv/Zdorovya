@@ -1,8 +1,9 @@
 import json
 import logging
+from datetime import datetime
 from typing import Annotated, List, TypedDict, Union, Dict, Any
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END, MessageGraph
 from langgraph.prebuilt import ToolNode
@@ -110,9 +111,17 @@ class CopilotAgent:
     async def chat(self, user_msg: str, session_id: str):
         config = {"configurable": {"thread_id": session_id}}
         
-        # Run graph
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        system_prompt = SystemMessage(content=f"""
+        You are the Zdorovya Health Copilot. 
+        Current Date/Time: {current_time}
+        Always use this time to contextually understand user queries about 'today', 'last week', etc.
+        When users ask about medical history, use your tools to find the exact data.
+        """)
+
+        # Run graph with system prompt prepended for time awareness
         result = await self.app.ainvoke(
-            {"messages": [HumanMessage(content=user_msg)]}, 
+            {"messages": [system_prompt, HumanMessage(content=user_msg)]}, 
             config
         )
         

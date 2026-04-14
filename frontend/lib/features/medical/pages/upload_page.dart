@@ -6,6 +6,8 @@ import 'package:shimmer/shimmer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/family_service.dart';
+import '../../../core/services/security_service.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -19,20 +21,48 @@ class _UploadPageState extends State<UploadPage> {
   Map<String, dynamic>? _extractedData;
   File? _selectedFile;
   final ImagePicker _picker = ImagePicker();
+  
+  String? _selectedPatientId;
+  List<Map<String, dynamic>> _members = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMembers();
+  }
+
+  Future<void> _loadMembers() async {
+    final members = await familyService.getMembers();
+    setState(() {
+      _members = members;
+      if (members.isNotEmpty) _selectedPatientId = members.first['id'];
+    });
+  }
 
   Future<void> _pickImage(ImageSource source) async {
     final XFile? photo = await _picker.pickImage(
       source: source,
-      imageQuality: 70, // Optimize for upload
+      imageQuality: 70,
     );
+    if (photo != null) _setFile(File(photo.path));
+  }
 
-    if (photo != null) {
-      setState(() {
-        _selectedFile = File(photo.path);
-        _isLoading = true;
-      });
-      _processFile();
+  Future<void> _pickDocument() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx'],
+    );
+    if (result != null && result.files.single.path != null) {
+      _setFile(File(result.files.single.path!));
     }
+  }
+
+  void _setFile(File file) {
+    setState(() {
+      _selectedFile = file;
+      _isLoading = true;
+    });
+    _processFile();
   }
 
   Future<void> _processFile() async {
@@ -45,6 +75,7 @@ class _UploadPageState extends State<UploadPage> {
           size: await _selectedFile!.length(),
           path: _selectedFile!.path,
         ),
+        patientId: _selectedPatientId,
       );
       setState(() {
         _extractedData = response['data'];
@@ -72,6 +103,7 @@ class _UploadPageState extends State<UploadPage> {
       final client = Supabase.instance.client;
       await client.from('medical_records').insert({
         'family_id': '00000000-0000-0000-0000-000000000000', 
+        'patient_id': _selectedPatientId,
         'type': _extractedData!['type'] ?? 'General',
         'file_url': fileUrl,
         'metadata': _extractedData!,
@@ -104,6 +136,16 @@ class _UploadPageState extends State<UploadPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            DropdownButtonFormField<String>(
+              value: _selectedPatientId,
+              decoration: const InputDecoration(labelText: 'For Patient', border: OutlineInputBorder()),
+              items: _members.map((m) => DropdownMenuItem(
+                value: m['id'] as String,
+                child: Text(m['name']),
+              )).toList(),
+              onChanged: (val) => setState(() => _selectedPatientId = val),
+            ),
+            const SizedBox(height: 20),
             _buildUploadCard(),
             const SizedBox(height: 30),
             if (_isLoading) _buildLoadingShimmer(),
@@ -126,12 +168,11 @@ class _UploadPageState extends State<UploadPage> {
                 onTap: () => _pickImage(ImageSource.camera),
               ),
             ),
-            const SizedBox(width: 15),
             Expanded(
               child: _actionButton(
-                icon: Icons.photo_library,
-                label: 'Gallery',
-                onTap: () => _pickImage(ImageSource.gallery),
+                icon: Icons.upload_file,
+                label: 'Upload PDF',
+                onTap: _pickDocument,
               ),
             ),
           ],
@@ -140,7 +181,21 @@ class _UploadPageState extends State<UploadPage> {
           const SizedBox(height: 20),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
-            child: Image.file(_selectedFile!, height: 150, width: double.infinity, fit: BoxFit.cover),
+            child: _selectedFile!.path.toLowerCase().endsWith('.pdf')
+                ? Container(
+                    height: 150,
+                    width: double.infinity,
+                    color: Colors.red.withAlpha(25),
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.picture_as_pdf, color: Colors.red, size: 50),
+                        SizedBox(height: 10),
+                        Text('PDF Selected', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  )
+                : Image.file(_selectedFile!, height: 150, width: double.infinity, fit: BoxFit.cover),
           ),
         ],
       ],
@@ -198,7 +253,7 @@ class _UploadPageState extends State<UploadPage> {
         const Divider(height: 30),
         if (data['summary'] != null) ...[
           Text('Summary', style: Theme.of(context).textTheme.titleMedium),
-          Text(data['summary'], style: TextStyle(color: Colors.black.withAlpha(204))),
+          Text(securityService.decrypt(data['summary']), style: TextStyle(color: Colors.black.withAlpha(204))),
           const SizedBox(height: 20),
         ],
         if (data['medicines'] != null && (data['medicines'] as List).isNotEmpty) ...[
@@ -206,7 +261,7 @@ class _UploadPageState extends State<UploadPage> {
           ...(data['medicines'] as List).map((m) => ListTile(
             leading: const Icon(Icons.medication),
             title: Text(m['name']),
-            subtitle: Text('${m['dosage']} - ${m['frequency']}'),
+            subtitle: Text('${securityService.decrypt(m['dosage'])} - ${m['frequency']}'),
             trailing: m['price'] != null ? Text(m['price'].toString()) : null,
           )),
         ],

@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, TypedDict
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -36,7 +37,8 @@ class AgentState(TypedDict):
     mime_type: str
     raw_text: Optional[str]
     extracted_data: Optional[ExtractionResult]
-    errors: List[str]
+    history_context: Optional[str]
+    current_time: str
     iterations: int
 
 # --- AI Service with LangGraph ---
@@ -48,6 +50,9 @@ class AIService:
             google_api_key=settings.gemini_api_key,
             temperature=0
         )
+        # Initialize Supabase for history lookups
+        from supabase import create_client
+        self.supabase = create_client(settings.supabase_url, settings.supabase_anon_key)
         self.workflow = self._build_graph()
 
     def _build_graph(self):
@@ -103,10 +108,14 @@ class AIService:
         structured_llm = self.llm.with_structured_output(ExtractionResult)
         
         prompt = f"""
+        Current Date/Time: {state['current_time']}
+        {state['history_context']}
+        
         Extract medical data from the following text:
         {state['raw_text']}
         
         Ensure accuracy for medication names and dosages.
+        IF there is history provided, briefly mention how this current result compares to previous trends in the 'summary' field.
         """
         
         result = await structured_llm.ainvoke(prompt)
@@ -129,13 +138,37 @@ class AIService:
             return "continue"
         return "end"
 
-    async def process_document(self, file_content: bytes, mime_type: str):
+    async def _fetch_history(self, patient_id: str):
+        """Fetch 3 months of medical history for context."""
+        try:
+            three_months_ago = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+            # Select relevant history from Supabase
+            res = self.supabase.from_('medical_records').select('type, extracted_text, record_date')\
+                .eq('patient_id', patient_id)\
+                .gte('record_date', three_months_ago)\
+                .order('record_date', desc=True).limit(3).execute()
+            
+            if not res.data:
+                return "No previous records found in the last 3 months."
+            
+            history = "\n".join([f"- {r['record_date']}: {r['type']} - {r['extracted_text']}" for r in res.data])
+            return f"Patient History (Past 3 Months):\n{history}"
+        except Exception as e:
+            logger.error(f"Error fetching history: {e}")
+            return "Could not retrieve patient history."
+
+    async def process_document(self, file_content: bytes, mime_type: str, patient_id: str = None):
         """Entry point for documentation processing."""
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        history = await self._fetch_history(patient_id) if patient_id else "No patient history provided."
+        
         initial_state = {
             "file_content": file_content,
             "mime_type": mime_type,
             "raw_text": None,
             "extracted_data": None,
+            "history_context": history,
+            "current_time": current_time,
             "errors": [],
             "iterations": 0
         }
@@ -148,7 +181,17 @@ class AIService:
         final_state = await self.workflow.ainvoke(initial_state)
         
         if final_state["extracted_data"]:
-            return final_state["extracted_data"].model_dump()
+            data = final_state["extracted_data"].model_dump()
+            
+            # Encrypt sensitive fields for safety
+            from .security_service import security_service
+            if data.get('summary'):
+                data['summary'] = security_service.encrypt_data(data['summary'])
+            for med in data.get('medicines', []):
+                if med.get('dosage'):
+                    med['dosage'] = security_service.encrypt_data(med['dosage'])
+            
+            return data
         else:
             raise Exception("AI failed to extract data: " + ", ".join(final_state["errors"]))
 

@@ -1,4 +1,6 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Form
+from functools import lru_cache
+from datetime import datetime
 from supabase import create_client, Client
 from .config import settings
 from .services.ai_service import ai_service
@@ -6,9 +8,27 @@ from .services.copilot_service import copilot_agent
 import logging
 from pydantic import BaseModel
 import uvicorn
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi import Request
 
 app = FastAPI(title="Zdorovya Backend")
 logger = logging.getLogger(__name__)
+
+# Security & Rate Limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # In production, replace with your specific app domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Supabase client initialization
 supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
@@ -21,22 +41,29 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
+@lru_cache(max_size=128)
+def _get_cached_user(token: str):
+    """Internal cache to avoid hammering Supabase auth endpoints."""
+    return supabase.auth.get_user(token)
+
 async def verify_token(authorization: str = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid token")
     
     token = authorization.split(" ")[1]
     try:
-        # Validate token with Supabase
-        user = supabase.auth.get_user(token)
+        user = _get_cached_user(token)
         return user
     except Exception as e:
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/v1/process-report")
+@limiter.limit("30/day")
 async def process_report(
+    request: Request,
     file: UploadFile = File(...),
-    # user_profile = Depends(verify_token) # Enable this when auth is fully linked
+    patient_id: str = Form(None),
+    user_profile = Depends(verify_token)
 ):
     """
     Endpoint to process a medical document (Image/PDF).
@@ -46,8 +73,8 @@ async def process_report(
         content = await file.read()
         mime_type = file.content_type
         
-        # Call AI service
-        extracted_data = await ai_service.process_document(content, mime_type)
+        # Call AI service with historical context
+        extracted_data = await ai_service.process_document(content, mime_type, patient_id=patient_id)
         
         return {
             "success": True,
@@ -67,7 +94,8 @@ class ChatRequest(BaseModel):
     session_id: str
 
 @app.post("/api/v1/copilot/chat")
-async def chat_with_copilot(req: ChatRequest):
+@limiter.limit("100/day")
+async def chat_with_copilot(req: ChatRequest, request: Request, user_profile = Depends(verify_token)):
     """
     Conversational AI interface for family health.
     """

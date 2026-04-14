@@ -13,6 +13,7 @@ import 'features/health/pages/family_members_page.dart';
 import 'features/medical/pages/medical_vault_page.dart';
 import 'core/services/keep_alive_service.dart';
 import 'core/services/notification_service.dart';
+import 'features/auth/pages/security_lock_page.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -71,7 +72,9 @@ class ZdorovyaApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
-      home: const MainNavigation(),
+      home: const SecurityLockPage(
+        child: MainNavigation(),
+      ),
     );
   }
 }

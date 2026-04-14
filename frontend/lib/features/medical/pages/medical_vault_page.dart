@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/pdf_service.dart';
 import '../../../core/theme/app_colors.dart';
 import 'upload_page.dart';
+import 'package:intl/intl.dart';
+import '../../../core/services/security_service.dart';
 
 class MedicalVaultPage extends StatefulWidget {
   const MedicalVaultPage({super.key});
@@ -78,7 +80,16 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
       child: ExpansionTile(
         leading: _buildTypeIcon(type),
         title: Text(type, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(date),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Record Date: $date'),
+            Text(
+              'Uploaded: ${DateFormat('MMM dd, yyyy • HH:mm').format(DateTime.parse(record['created_at']))}',
+              style: const TextStyle(fontSize: 10, color: Colors.grey),
+            ),
+          ],
+        ),
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -91,7 +102,7 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
                   _detailRow('Provider', metadata['doctor_name']),
                 const SizedBox(height: 12),
                 Text('AI Summary:', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary)),
-                Text(record['extracted_text'] ?? 'No summary available.'),
+                Text(securityService.decrypt(record['extracted_text'] ?? 'No summary available.')),
                 const SizedBox(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,

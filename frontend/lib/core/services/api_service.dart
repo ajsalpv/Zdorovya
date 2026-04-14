@@ -6,7 +6,7 @@ class ApiService {
   final String _baseUrl = 'https://zdorovya.onrender.com';
   final Dio _dio = Dio();
 
-  Future<Map<String, dynamic>> processReport(PlatformFile file) async {
+  Future<Map<String, dynamic>> processReport(PlatformFile file, {String? patientId}) async {
     try {
       String fileName = file.name;
       FormData formData = FormData.fromMap({
@@ -14,6 +14,7 @@ class ApiService {
           file.path!,
           filename: fileName,
         ),
+        if (patientId != null) "patient_id": patientId,
       });
 
       var response = await _dio.post(

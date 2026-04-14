@@ -9,3 +9,5 @@ langgraph>=0.2.5
 python-multipart==0.0.9
 python-dotenv==1.0.1
 httpx>=0.24.0
+cryptography==42.0.5
+slowapi==0.1.9
