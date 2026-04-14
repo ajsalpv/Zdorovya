@@ -7,7 +7,6 @@ class TrendsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Health Analytics')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

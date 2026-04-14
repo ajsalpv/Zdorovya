@@ -9,6 +9,9 @@ import 'features/reminders/pages/reminders_page.dart';
 import 'features/chat/pages/chat_page.dart';
 import 'features/health/pages/trends_page.dart';
 import 'features/emergency/pages/emergency_page.dart';
+import 'features/health/pages/family_members_page.dart';
+import 'features/medical/pages/medical_vault_page.dart';
+import 'core/services/keep_alive_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -17,14 +20,17 @@ void main() async {
   
   // Initialize Supabase
   await Supabase.initialize(
-    url: 'https://your-project.supabase.co',
-    anonKey: 'your-anon-key',
+    url: 'https://jlrzzrhxqvpzrltolkbf.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impscnp6cmh4cXZwenJsdG9sa2JmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDU0NTQsImV4cCI6MjA5MTY4MTQ1NH0.8Y3-zKl1AZqTolXeDto1aHsvIzu4e0o88q0a4wjeRXM',
   );
 
   // Initialize Notifications
   const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
   const InitializationSettings initializationSettings = InitializationSettings(android: initializationSettingsAndroid);
   await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  // Start Keep-Alive (Ping Render)
+  keepAliveService.start();
 
   runApp(const ZdorovyaApp());
 }
@@ -82,17 +88,36 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   
+  final List<String> _titles = [
+    'Zdorovya Pharmacy',
+    'Daily Alarms',
+    'Health Copilot',
+    'Health Trends',
+    'Medical Vault'
+  ];
+  
   final List<Widget> _pages = [
     const MedicineDashboard(),
     const RemindersPage(),
     const ChatPage(),
     const TrendsPage(),
-    const UploadPage(),
+    const MedicalVaultPage(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text(_titles[_selectedIndex]),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.family_restroom),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageFamilyPage())),
+            tooltip: 'Manage Family',
+          ),
+          const SizedBox(width: 10),
+        ],
+      ),
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
@@ -102,7 +127,7 @@ class _MainNavigationState extends State<MainNavigation> {
           NavigationDestination(icon: Icon(Icons.notifications_active_outlined), label: 'Alarms'),
           NavigationDestination(icon: Icon(Icons.smart_toy_outlined), label: 'Copilot'),
           NavigationDestination(icon: Icon(Icons.analytics_outlined), label: 'Trends'),
-          NavigationDestination(icon: Icon(Icons.add_a_photo_outlined), label: 'Upload'),
+          NavigationDestination(icon: Icon(Icons.folder_shared_outlined), label: 'Vault'),
         ],
       ),
     );

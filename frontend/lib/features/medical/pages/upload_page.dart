@@ -3,6 +3,9 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/services/api_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../../../core/services/storage_service.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -14,28 +17,45 @@ class UploadPage extends StatefulWidget {
 class _UploadPageState extends State<UploadPage> {
   bool _isLoading = false;
   Map<String, dynamic>? _extractedData;
+  File? _selectedFile;
+  final ImagePicker _picker = ImagePicker();
 
-  Future<void> _pickAndUpload() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+  Future<void> _pickImage(ImageSource source) async {
+    final XFile? photo = await _picker.pickImage(
+      source: source,
+      imageQuality: 70, // Optimize for upload
     );
 
-    if (result != null) {
-      setState(() => _isLoading = true);
-      try {
-        final response = await apiService.processReport(result.files.first);
-        setState(() {
-          _extractedData = response['data'];
-          _isLoading = false;
-        });
-      } catch (e) {
-        setState(() => _isLoading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-          );
-        }
+    if (photo != null) {
+      setState(() {
+        _selectedFile = File(photo.path);
+        _isLoading = true;
+      });
+      _processFile();
+    }
+  }
+
+  Future<void> _processFile() async {
+    if (_selectedFile == null) return;
+    
+    try {
+      final response = await apiService.processReport(
+        PlatformFile(
+          name: _selectedFile!.path.split('/').last,
+          size: await _selectedFile!.length(),
+          path: _selectedFile!.path,
+        ),
+      );
+      setState(() {
+        _extractedData = response['data'];
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Processing Error: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -45,13 +65,18 @@ class _UploadPageState extends State<UploadPage> {
     
     setState(() => _isLoading = true);
     try {
+      // 1. Upload to Storage
+      final fileUrl = await storageService.uploadMedicalRecord(_selectedFile!);
+
+      // 2. Save to Database
       final client = Supabase.instance.client;
       await client.from('medical_records').insert({
-        'family_id': 'demo-family-id', 
-        'type': _extractedData!['type'],
-        'file_url': 'tmp_placeholder', 
+        'family_id': '00000000-0000-0000-0000-000000000000', 
+        'type': _extractedData!['type'] ?? 'General',
+        'file_url': fileUrl,
         'metadata': _extractedData!,
         'extracted_text': _extractedData!['summary'],
+        'record_date': _extractedData!['date'] ?? DateTime.now().toIso8601String().split('T')[0],
       });
 
       if (mounted) {
@@ -74,7 +99,6 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New Report')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -91,23 +115,55 @@ class _UploadPageState extends State<UploadPage> {
   }
 
   Widget _buildUploadCard() {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _actionButton(
+                icon: Icons.camera_alt,
+                label: 'Take Photo',
+                onTap: () => _pickImage(ImageSource.camera),
+              ),
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: _actionButton(
+                icon: Icons.photo_library,
+                label: 'Gallery',
+                onTap: () => _pickImage(ImageSource.gallery),
+              ),
+            ),
+          ],
+        ),
+        if (_selectedFile != null) ...[
+          const SizedBox(height: 20),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.file(_selectedFile!, height: 150, width: double.infinity, fit: BoxFit.cover),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _actionButton({required IconData icon, required String label, required VoidCallback onTap}) {
     return InkWell(
-      onTap: _isLoading ? null : _pickAndUpload,
+      onTap: _isLoading ? null : onTap,
       borderRadius: BorderRadius.circular(15),
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 40),
+        height: 100,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.primaryContainer.withAlpha(50),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(color: Theme.of(context).colorScheme.primary, width: 2),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.cloud_upload_outlined, size: 50, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 10),
-            const Text('Upload Prescription or Lab Report', style: TextStyle(fontWeight: FontWeight.bold)),
-            Text('PDF, JPG, PNG accepted', style: TextStyle(fontSize: 12, color: Colors.black.withAlpha(178))),
+            Icon(icon, size: 30, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 5),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
       ),

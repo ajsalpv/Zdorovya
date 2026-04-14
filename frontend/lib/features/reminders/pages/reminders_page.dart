@@ -8,19 +8,9 @@ class RemindersPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Daily Dosage'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(40),
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: Text('Today, ${DateFormat('MMMM dd').format(DateTime.now())}', style: TextStyle(color: Colors.black.withAlpha(128))),
-          ),
-        ),
-      ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
         // For demo, assumes a family_id. 
-        stream: medicineService.getPendingReminders('demo-family-id'),
+        stream: medicineService.getPendingReminders('00000000-0000-0000-0000-000000000000'),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

@@ -42,11 +42,6 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Health Copilot'),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
       body: Column(
         children: [
           Expanded(

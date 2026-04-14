@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/medicine_service.dart';
+import '../../medical/pages/upload_page.dart';
 import 'package:intl/intl.dart';
 
 class MedicineDashboard extends StatelessWidget {
@@ -8,21 +9,15 @@ class MedicineDashboard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pharmacy Vault'),
-        actions: [
-          IconButton(icon: const Icon(Icons.add_shopping_cart), onPressed: () {}),
-        ],
-      ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         // For demo, we assume a family_id. In production, this comes from Auth provider.
-        future: medicineService.getMedicines('demo-family-id'),
+        future: medicineService.getMedicines('00000000-0000-0000-0000-000000000000'),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
+            return _buildEmptyState(context);
           }
 
           final medicines = snapshot.data!;
@@ -44,7 +39,7 @@ class MedicineDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -53,7 +48,10 @@ class MedicineDashboard extends StatelessWidget {
           const SizedBox(height: 20),
           Text('No medicines tracked yet', style: TextStyle(fontSize: 18, color: Colors.black.withAlpha(128))),
           const SizedBox(height: 10),
-          ElevatedButton(onPressed: () {}, child: const Text('Scan Prescription')),
+          ElevatedButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
+            child: const Text('Scan Prescription'),
+          ),
         ],
       ),
     );
