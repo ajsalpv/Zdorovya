@@ -109,7 +109,7 @@ class AIService:
         Ensure accuracy for medication names and dosages.
         """
         
-        result = structured_llm.invoke(prompt)
+        result = await structured_llm.ainvoke(prompt)
         return {"extracted_data": result, "iterations": state['iterations'] + 1}
 
     async def node_validation(self, state: AgentState):
@@ -148,7 +148,7 @@ class AIService:
         final_state = await self.workflow.ainvoke(initial_state)
         
         if final_state["extracted_data"]:
-            return final_state["extracted_data"].dict()
+            return final_state["extracted_data"].model_dump()
         else:
             raise Exception("AI failed to extract data: " + ", ".join(final_state["errors"]))
 

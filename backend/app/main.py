@@ -3,10 +3,12 @@ from supabase import create_client, Client
 from .config import settings
 from .services.ai_service import ai_service
 from .services.copilot_service import copilot_agent
+import logging
 from pydantic import BaseModel
 import uvicorn
 
 app = FastAPI(title="Zdorovya Backend")
+logger = logging.getLogger(__name__)
 
 # Supabase client initialization
 supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
