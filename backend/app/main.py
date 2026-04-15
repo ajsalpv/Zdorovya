@@ -8,13 +8,37 @@ from .services.copilot_service import copilot_agent
 import logging
 from pydantic import BaseModel
 import uvicorn
+import asyncio
+import httpx
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 
-app = FastAPI(title="Zdorovya Backend")
+async def self_ping():
+    """Background task to ping the server itself and stay awake."""
+    await asyncio.sleep(10) # Initial wait for startup
+    client = httpx.AsyncClient()
+    while True:
+        try:
+            # Ping localhost to keep the event loop busy
+            await client.get(f"http://localhost:{settings.port}/health")
+            logger.info("Self-ping successful")
+        except Exception as e:
+            logger.error(f"Self-ping failed: {e}")
+        await asyncio.sleep(600) # 10 minutes
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Start self-pinging
+    ping_task = asyncio.create_task(self_ping())
+    yield
+    # Shutdown: Stop task
+    ping_task.cancel()
+
+app = FastAPI(title="Zdorovya Backend", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 # Security & Rate Limiting
