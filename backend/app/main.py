@@ -79,6 +79,7 @@ async def verify_token(authorization: str = Header(None)):
         user = _get_cached_user(token)
         return user
     except Exception as e:
+        logger.error(f"Token verification failed: {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/v1/process-report")

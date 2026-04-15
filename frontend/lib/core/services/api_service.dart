@@ -1,25 +1,33 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' as dio;
 import 'package:file_picker/file_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApiService {
   final String _baseUrl = 'https://zdorovya.onrender.com';
-  final Dio _dio = Dio();
+  final dio.Dio _dio = dio.Dio();
 
   Future<Map<String, dynamic>> processReport(PlatformFile file, {String? patientId}) async {
     try {
       String fileName = file.name;
-      FormData formData = FormData.fromMap({
-        "file": await MultipartFile.fromFile(
+      dio.FormData formData = dio.FormData.fromMap({
+        "file": await dio.MultipartFile.fromFile(
           file.path!,
           filename: fileName,
         ),
         if (patientId != null) "patient_id": patientId,
       });
 
+      final token = Supabase.instance.client.auth.currentSession?.accessToken;
+
       var response = await _dio.post(
         "$_baseUrl/api/v1/process-report",
         data: formData,
+        options: dio.Options(
+          headers: {
+            if (token != null) "Authorization": "Bearer $token",
+          },
+        ),
       );
 
       if (response.statusCode == 200) {
