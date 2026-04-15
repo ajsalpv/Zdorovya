@@ -27,7 +27,7 @@ class BiometricService {
         authMessages: const [
           AndroidAuthMessages(
             signInTitle: 'Zdorovya Security',
-            fingerprintHint: 'Verify your ID',
+            biometricHint: 'Verify your ID',
           ),
           IOSAuthMessages(
             cancelButton: 'No thanks',

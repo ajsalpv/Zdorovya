@@ -41,7 +41,7 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-@lru_cache(max_size=128)
+@lru_cache(maxsize=128)
 def _get_cached_user(token: str):
     """Internal cache to avoid hammering Supabase auth endpoints."""
     return supabase.auth.get_user(token)
