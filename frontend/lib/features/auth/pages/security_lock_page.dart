@@ -12,6 +12,7 @@ class SecurityLockPage extends StatefulWidget {
 
 class _SecurityLockPageState extends State<SecurityLockPage> {
   bool _isAuthenticated = false;
+  bool _isChecking = false;
 
   @override
   void initState() {
@@ -20,15 +21,42 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
   }
 
   Future<void> _checkBiometrics() async {
-    final bool canCheck = await biometricService.canCheckBiometrics();
-    if (!canCheck) {
-      setState(() => _isAuthenticated = true);
-      return;
-    }
-    
-    final bool success = await biometricService.authenticate();
-    if (success) {
-      setState(() => _isAuthenticated = true);
+    if (_isChecking) return;
+    setState(() => _isChecking = true);
+
+    try {
+      final bool canCheck = await biometricService.canCheckBiometrics();
+      if (!canCheck) {
+        setState(() {
+          _isAuthenticated = true;
+          _isChecking = false;
+        });
+        return;
+      }
+      
+      final bool success = await biometricService.authenticate();
+      if (success) {
+        setState(() => _isAuthenticated = true);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Authentication failed. Please try again.'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isChecking = false);
+      }
     }
   }
 
@@ -54,16 +82,19 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
               style: TextStyle(color: Colors.white70),
             ),
             const SizedBox(height: 40),
-            ElevatedButton.icon(
-              onPressed: _checkBiometrics,
-              icon: const Icon(Icons.fingerprint),
-              label: const Text('Unlock Now'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            if (_isChecking)
+              const CircularProgressIndicator(color: Colors.white)
+            else
+              ElevatedButton.icon(
+                onPressed: _checkBiometrics,
+                icon: const Icon(Icons.fingerprint),
+                label: const Text('Unlock Now'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                ),
               ),
-            ),
           ],
         ),
       ),

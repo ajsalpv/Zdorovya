@@ -10,6 +10,7 @@ from pydantic import BaseModel
 import uvicorn
 import asyncio
 import httpx
+import os
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -17,26 +18,36 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi import Request
 
-async def self_ping():
-    """Background task to ping the server itself and stay awake."""
-    await asyncio.sleep(10) # Initial wait for startup
-    client = httpx.AsyncClient()
-    while True:
-        try:
-            # Ping localhost to keep the event loop busy
-            await client.get(f"http://localhost:{settings.port}/health")
-            logger.info("Self-ping successful")
-        except Exception as e:
-            logger.error(f"Self-ping failed: {e}")
-        await asyncio.sleep(600) # 10 minutes
+async def _keep_alive_ping():
+    """Background task to ping the server every 4 minutes to prevent Render sleep."""
+    base_url = os.environ.get("RENDER_EXTERNAL_URL", f"http://127.0.0.1:{settings.port}")
+    url = f"{base_url}/api/ping"
+    
+    await asyncio.sleep(10)  # Wait for startup
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while True:
+            try:
+                resp = await client.get(url)
+                logger.info(f"Keep-alive ping OK ({resp.status_code}) -> {url}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Keep-alive ping failed: {e}")
+            await asyncio.sleep(240)  # 4 minutes
+
+_keep_alive_task = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Start self-pinging
-    ping_task = asyncio.create_task(self_ping())
+    global _keep_alive_task
+    # Startup: Start keep-alive pinger
+    _keep_alive_task = asyncio.create_task(_keep_alive_ping())
+    logger.info("🏥 Zdorovya Backend started — keep-alive active (4 min interval)")
     yield
     # Shutdown: Stop task
-    ping_task.cancel()
+    if _keep_alive_task:
+        _keep_alive_task.cancel()
+    logger.info("🛑 Zdorovya Backend shutting down")
 
 app = FastAPI(title="Zdorovya Backend", lifespan=lifespan)
 logger = logging.getLogger(__name__)
@@ -60,6 +71,11 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_k
 @app.get("/")
 async def root():
     return {"message": "Zdorovya Backend is running"}
+
+@app.get("/api/ping", tags=["health"])
+async def ping_endpoint():
+    """Lightweight endpoint used by keep-alive pinger and GitHub Action."""
+    return {"status": "ok", "message": "Zdorovya is awake!"}
 
 @app.get("/health")
 async def health_check():
