@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart' as dio;
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'profile_service.dart';
 
 class ChatService {
   final String _baseUrl = 'https://zdorovya.onrender.com';
@@ -10,12 +11,14 @@ class ChatService {
   Future<Map<String, dynamic>> sendMessage(String message) async {
     try {
       final token = Supabase.instance.client.auth.currentSession?.accessToken;
+      final activeProfileId = profileService.activeProfile?.id ?? 'guest';
 
       final response = await _dio.post(
         "$_baseUrl/api/v1/copilot/chat",
         data: {
           "message": message,
           "session_id": _sessionId,
+          "active_profile_id": activeProfileId,
         },
         options: dio.Options(
           headers: {
@@ -23,6 +26,7 @@ class ChatService {
           },
         ),
       );
+
 
       if (response.statusCode == 200) {
         return response.data;

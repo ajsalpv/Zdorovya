@@ -154,6 +154,7 @@ async def process_report(
 class ChatRequest(BaseModel):
     message: str
     session_id: str
+    active_profile_id: str
 
 @app.post("/api/v1/copilot/chat")
 @limiter.limit("100/day")
@@ -162,8 +163,9 @@ async def chat_with_copilot(req: ChatRequest, request: Request, user_profile = D
     Conversational AI interface for family health.
     """
     try:
-        response = await copilot_agent.chat(req.message, req.session_id)
+        response = await copilot_agent.chat(req.message, req.session_id, req.active_profile_id)
         return response
+
     except Exception as e:
         logger.error(f"Chat error: {e}")
         error_msg = str(e)

@@ -6,6 +6,9 @@ import 'upload_page.dart';
 import 'package:intl/intl.dart';
 import '../../../core/services/security_service.dart';
 
+import '../../../core/services/medical_vault_service.dart';
+import '../../../core/services/profile_service.dart';
+
 class MedicalVaultPage extends StatefulWidget {
   const MedicalVaultPage({super.key});
 
@@ -14,22 +17,19 @@ class MedicalVaultPage extends StatefulWidget {
 }
 
 class _MedicalVaultPageState extends State<MedicalVaultPage> {
-  final SupabaseClient _supabase = Supabase.instance.client;
-  final String _familyId = '00000000-0000-0000-0000-000000000000';
   bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _supabase
-            .from('medical_records')
-            .stream(primaryKey: ['id'])
-            .eq('family_id', _familyId)
-            .order('record_date', ascending: false),
+        stream: medicalVaultService.getRecordsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return _buildEmptyState();
@@ -61,9 +61,15 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
           const Opacity(opacity: 0.2, child: Icon(Icons.folder_open, size: 80)),
           const SizedBox(height: 16),
           const Text('Your Medical Vault is empty'),
-          TextButton(
+          Text(
+            profileService.isAdmin ? 'Upload records for any family member.' : 'Upload your own records here.',
+            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
-            child: const Text('Upload your first record'),
+            icon: const Icon(Icons.upload),
+            label: const Text('Upload Record'),
           ),
         ],
       ),
@@ -74,18 +80,27 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
     final metadata = record['metadata'] as Map<String, dynamic>? ?? {};
     final type = record['type'] ?? 'Unknown';
     final date = record['record_date'] ?? 'No Date';
+    final isPrivate = record['is_private'] ?? false;
+    final patientName = metadata['patient_name'] ?? 'Unknown';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ExpansionTile(
         leading: _buildTypeIcon(type),
-        title: Text(type, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Expanded(child: Text(type, style: const TextStyle(fontWeight: FontWeight.bold))),
+            if (isPrivate)
+              const Icon(Icons.lock, size: 16, color: Colors.blue),
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Record Date: $date'),
+            Text('$patientName • $date', style: const TextStyle(fontSize: 13)),
             Text(
-              'Uploaded: ${DateFormat('MMM dd, yyyy • HH:mm').format(DateTime.parse(record['created_at']))}',
+              'Uploaded: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(record['created_at']))}',
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
           ],
@@ -96,8 +111,6 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (metadata['patient_name'] != null)
-                  _detailRow('Patient', metadata['patient_name']),
                 if (metadata['doctor_name'] != null)
                   _detailRow('Provider', metadata['doctor_name']),
                 const SizedBox(height: 12),
@@ -107,16 +120,21 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (isPrivate)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 8.0),
+                        child: Text('PRIVATE', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold, fontSize: 10)),
+                      ),
                     OutlinedButton.icon(
                       onPressed: () => _viewImage(record['file_url']),
                       icon: const Icon(Icons.image),
-                      label: const Text('View Original'),
+                      label: const Text('View'),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
                       onPressed: () => _downloadPdf(record),
                       icon: const Icon(Icons.picture_as_pdf),
-                      label: const Text('Download PDF'),
+                      label: const Text('PDF'),
                     ),
                   ],
                 ),
@@ -127,6 +145,7 @@ class _MedicalVaultPageState extends State<MedicalVaultPage> {
       ),
     );
   }
+
 
   Widget _buildTypeIcon(String type) {
     IconData icon;

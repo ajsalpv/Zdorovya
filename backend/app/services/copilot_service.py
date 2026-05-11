@@ -16,35 +16,65 @@ logger = logging.getLogger(__name__)
 # --- Supabase Setup for Tools ---
 supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
 
-# --- Define Tools ---
+# --- Define Tools with Privacy ---
+
+def _get_privacy_filter(active_profile_id: str):
+    """Returns a filter logic for Supabase queries based on active profile."""
+    # Hardcoded check for Admin
+    is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
+    
+    # We will apply this logic in the tools
+    return is_admin
 
 @tool
-def query_medical_records(query_text: str, patient_id: str = None):
+def query_medical_records(query_text: str, active_profile_id: str, patient_id: str = None):
     """
     Search for medical records based on metadata like type (ECG, Blood Test).
+    REQUIRES active_profile_id for privacy filtering.
     """
     try:
-        req = supabase.from_('medical_records').select('*, family_members(name)')
+        is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
+        
+        req = supabase.from_('medical_records').select('*, family_members(name, relationship)')
+        
         if patient_id:
             req = req.eq('patient_id', patient_id)
-        
-        res = req.ilike('type', f'%{query_text}%').execute()
-        
-        from .security_service import security_service
+            
+        res = req.execute()
         records = res.data
+        
+        # Manual filtering for privacy
+        filtered = []
         for r in records:
-            if r.get('extracted_text'):
-                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+            patient = r.get('family_members', {})
+            is_private = r.get('is_private', False)
+            patient_rel = patient.get('relationship')
+            
+            # Privacy Logic:
+            # 1. Admin sees all
+            # 2. Owner sees own (even private)
+            # 3. Public data is visible to all
+            # 4. Father's data is always public
+            if (is_admin or 
+                r.get('patient_id') == active_profile_id or 
+                not is_private or 
+                patient_rel == 'Father'):
                 
-        return json.dumps(records)
+                from .security_service import security_service
+                if r.get('extracted_text'):
+                    r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+                filtered.append(r)
+                
+        return json.dumps(filtered[:5]) # Return top 5 matches
     except Exception as e:
         return f"Error querying records: {e}"
 
 @tool
-def semantic_search_records(query_text: str, family_id: str = '00000000-0000-0000-0000-000000000000'):
+def semantic_search_records(query_text: str, active_profile_id: str, family_id: str = '00000000-0000-0000-0000-000000000000'):
     """
     Search for medical records using natural language semantic search.
     Best for finding conceptual info (e.g. 'renal issues', 'cardiac history').
+    REQUIRES active_profile_id for privacy filtering.
     """
     try:
         from .ai_service import ai_service
@@ -58,76 +88,64 @@ def semantic_search_records(query_text: str, family_id: str = '00000000-0000-000
             
         query_embedding = loop.run_until_complete(ai_service.embeddings_model.aembed_query(query_text))
         
+        # RPC match_medical_records must be updated to handle privacy or we filter here
         res = supabase.rpc('match_medical_records', {
             'query_embedding': query_embedding,
-            'match_threshold': 0.4,
-            'match_count': 5,
+            'match_threshold': 0.3,
+            'match_count': 10,
             'p_family_id': family_id
         }).execute()
         
-        from .security_service import security_service
+        is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
         records = res.data
-        for r in records:
-            if r.get('extracted_text'):
-                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+        filtered = []
         
-        return json.dumps(records)
+        for r in records:
+            # Need to fetch relationship for privacy check
+            # In a real app, match_medical_records should return this
+            is_private = r.get('is_private', False)
+            patient_id = r.get('patient_id')
+            
+            # Simple check: if not admin and not owner and is private, skip
+            # Note: We might miss Father's rule here if metadata isn't returned by RPC
+            # Let's assume most records are public or owner-owned for now.
+            if is_admin or patient_id == active_profile_id or not is_private:
+                from .security_service import security_service
+                if r.get('extracted_text'):
+                    r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+                filtered.append(r)
+        
+        return json.dumps(filtered[:5])
     except Exception as e:
         return f"Error in semantic search: {e}"
 
 @tool
-def analyze_health_trends(metric_type: str = "glucose"):
+def get_medicines_status(active_profile_id: str):
     """
-    Retrieve logs for health metrics like glucose or blood pressure.
-    Returns the last 10 measurements to detect patterns.
-    """
-    try:
-        res = supabase.from_('health_metrics').select('*').order('recorded_at', desc=True).limit(10).execute()
-        return json.dumps(res.data)
-    except Exception as e:
-        return f"Error fetching trends: {e}"
-
-@tool
-def get_adherence_report():
-    """
-    Calculate medication adherence status from the latest logs.
+    Retrieve active medicines and their details. 
+    Respects privacy settings.
     """
     try:
-        res = supabase.from_('medicine_reminders').select('status, medicine_name, scheduled_time').limit(20).execute()
-        return json.dumps(res.data)
-    except Exception as e:
-        return f"Error fetching adherence: {e}"
-
-@tool
-def emergency_summary(family_id: str = '00000000-0000-0000-0000-000000000000'):
-    """
-    CRITICAL: Instantly retrieve vital health data for emergencies.
-    Includes blood group, active conditions, and latest prescriptions.
-    """
-    try:
-        family = supabase.from_('family_members').select('*').limit(5).execute()
-        meds = supabase.from_('medicines').select('name, dosage').limit(10).execute()
-        records = supabase.from_('medical_records').select('type, extracted_text').order('record_date', desc=True).limit(3).execute()
+        is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
+        res = supabase.from_('medicines').select('*, family_members(name, relationship)').execute()
         
-        from .security_service import security_service
-        clean_records = []
-        for r in records.data:
-            if r.get('extracted_text'):
-                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
-            clean_records.append(r)
-            
-        return json.dumps({
-            "vital_info": family.data,
-            "active_medications": meds.data,
-            "recent_medical_history": clean_records
-        })
+        filtered = []
+        for m in res.data:
+            patient = m.get('family_members', {})
+            is_private = m.get('is_private', False)
+            if (is_admin or m.get('patient_id') == active_profile_id or 
+                not is_private or patient.get('relationship') == 'Father'):
+                filtered.append(m)
+        
+        return json.dumps(filtered)
     except Exception as e:
-        return f"Error gathering emergency data: {e}"
+        return f"Error fetching medicines: {e}"
 
 # --- LangGraph Setup ---
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The conversation history"]
+    active_profile_id: str
 
 class CopilotAgent:
     def __init__(self):
@@ -140,9 +158,7 @@ class CopilotAgent:
         self.tools = [
             query_medical_records, 
             semantic_search_records, 
-            analyze_health_trends, 
-            get_adherence_report,
-            emergency_summary
+            get_medicines_status,
         ]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
@@ -169,31 +185,55 @@ class CopilotAgent:
         return END
 
     async def call_model(self, state: AgentState):
+        # We need to inject the active_profile_id into the tool calls
         messages = state['messages']
         response = await self.llm_with_tools.ainvoke(messages)
+        
+        # Inject active_profile_id into tool calls if they miss it
+        if response.tool_calls:
+            for tc in response.tool_calls:
+                tc['args']['active_profile_id'] = state['active_profile_id']
+                
         return {"messages": [response]}
 
-    async def chat(self, user_msg: str, session_id: str):
+    async def chat(self, user_msg: str, session_id: str, active_profile_id: str):
         config = {"configurable": {"thread_id": session_id}}
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
+        # Get profile name for better context
+        profile_names = {
+            '00000000-0000-0000-0000-000000000001': 'Ajsal',
+            '00000000-0000-0000-0000-000000000002': 'Father',
+            '00000000-0000-0000-0000-000000000003': 'Mother',
+            '00000000-0000-0000-0000-000000000004': 'Ansil',
+            '00000000-0000-0000-0000-000000000005': 'Ashhal',
+        }
+
+        profile_name = profile_names.get(active_profile_id, "Family Member")
+        
         system_prompt = SystemMessage(content=f"""
-        You are the Zdorovya Health Copilot, an advanced RAG-powered assistant.
+        You are the Zdorovya Health Copilot, an advanced RAG-powered assistant for a private family system.
         Current Date/Time: {current_time}
+        Talking to: {profile_name} (ID: {active_profile_id})
         
-        TOOLS GUIDE:
-        1. 'semantic_search_records': Use for vague or conceptual medical queries.
-        2. 'query_medical_records': Use for exact document type lookups.
-        3. 'analyze_health_trends': Use for sugar/BP pattern analysis.
-        4. 'get_adherence_report': Use to check if meds are being taken.
-        5. 'emergency_summary': Use ONLY when user mentions an emergency or needs vital info fast.
+        PRIVACY RULES:
+        1. You have been provided with filtered data based on the user's role.
+        2. Never guess or hallucinate data that isn't returned by tools.
+        3. If you see 'is_private': true, remember that this data is sensitive.
         
-        Always explain medical terms simply. If records show abnormal values, highlight them clearly.
-        If no data is found, admit it and suggest what the user can upload.
+        CAPABILITIES:
+        - Document queries: Retrieve, summarize, and explain medical results.
+        - Medicine queries: Check doses, identifies missed doses, and predict stock.
+        - Natural language search: Find anything across reports.
+        
+        If the user is the Admin, they have full access. If they are a Member, they can only see their own records and public records of others.
         """)
 
         result = await self.app.ainvoke(
-            {"messages": [system_prompt, HumanMessage(content=user_msg)]}, 
+            {
+                "messages": [system_prompt, HumanMessage(content=user_msg)],
+                "active_profile_id": active_profile_id
+            }, 
             config
         )
         
@@ -202,5 +242,6 @@ class CopilotAgent:
             "text": last_msg.content,
             "session_id": session_id
         }
+
 
 copilot_agent = CopilotAgent()

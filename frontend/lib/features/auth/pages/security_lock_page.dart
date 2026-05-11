@@ -3,8 +3,9 @@ import '../../../core/services/biometric_service.dart';
 import '../../../core/theme/app_colors.dart';
 
 class SecurityLockPage extends StatefulWidget {
-  final Widget child;
-  const SecurityLockPage({super.key, required this.child});
+  final Widget? child;
+  final VoidCallback? onAuthenticated;
+  const SecurityLockPage({super.key, this.child, this.onAuthenticated});
 
   @override
   State<SecurityLockPage> createState() => _SecurityLockPageState();
@@ -20,6 +21,14 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     _checkBiometrics();
   }
 
+  void _handleSuccess() {
+    if (widget.onAuthenticated != null) {
+      widget.onAuthenticated!();
+    } else {
+      setState(() => _isAuthenticated = true);
+    }
+  }
+
   Future<void> _checkBiometrics() async {
     if (_isChecking) return;
     setState(() => _isChecking = true);
@@ -27,36 +36,18 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     try {
       final bool canCheck = await biometricService.canCheckBiometrics();
       if (!canCheck) {
-        setState(() {
-          _isAuthenticated = true;
-          _isChecking = false;
-        });
+        _handleSuccess();
         return;
       }
       
       final bool success = await biometricService.authenticate();
       if (success) {
-        setState(() => _isAuthenticated = true);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Authentication failed. Please try again.'),
-              backgroundColor: Colors.redAccent,
-            ),
-          );
-        }
+        _handleSuccess();
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
+      debugPrint('Biometric error: $e');
     } finally {
-      if (mounted) {
-        setState(() => _isChecking = false);
-      }
+      if (mounted) setState(() => _isChecking = false);
     }
   }
 
@@ -64,8 +55,9 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
   bool _showPinField = false;
 
   void _verifyPin() {
-    if (_pinController.text == '1234') { // For demo, default PIN is 1234
-      setState(() => _isAuthenticated = true);
+    // Admin default PIN: 1234
+    if (_pinController.text == '1234') {
+      _handleSuccess();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Incorrect PIN'), backgroundColor: Colors.redAccent),
@@ -75,10 +67,18 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isAuthenticated) return widget.child;
+    if (_isAuthenticated && widget.child != null) return widget.child!;
 
     return Scaffold(
       backgroundColor: AppColors.primary,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: widget.onAuthenticated != null ? IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ) : null,
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -88,7 +88,7 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
               const Icon(Icons.lock_outline, size: 80, color: Colors.white),
               const SizedBox(height: 24),
               const Text(
-                'Zdorovya Locked',
+                'Admin Access Required',
                 style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 40),
@@ -103,8 +103,10 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primary,
                     minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextButton(
                   onPressed: () => setState(() => _showPinField = true),
                   child: const Text('Use Security PIN', style: TextStyle(color: Colors.white70)),
@@ -115,23 +117,26 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
                   obscureText: true,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 10),
+                  autofocus: true,
+                  style: const TextStyle(color: Colors.white, fontSize: 32, letterSpacing: 10),
                   decoration: const InputDecoration(
                     hintText: '••••',
                     hintStyle: TextStyle(color: Colors.white30),
                     enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white, width: 2)),
                   ),
                   onSubmitted: (_) => _verifyPin(),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 40),
                 ElevatedButton(
                   onPressed: _verifyPin,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: AppColors.primary,
                     minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Verify PIN'),
+                  child: const Text('Verify Admin PIN', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 TextButton(
                   onPressed: () => setState(() => _showPinField = false),
@@ -145,3 +150,4 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     );
   }
 }
+

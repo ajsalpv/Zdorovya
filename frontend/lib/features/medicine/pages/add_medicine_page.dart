@@ -17,6 +17,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   final _dosageController = TextEditingController();
   final _quantityController = TextEditingController(text: '30');
   
+  bool _isPrivate = false;
   String _frequency = 'Daily';
   String? _selectedMemberId;
   TimeOfDay _selectedTime = const TimeOfDay(hour: 8, minute: 0);
@@ -27,6 +28,15 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
   void initState() {
     super.initState();
     _loadMembers();
+  }
+
+  void _updatePrivacyLock() {
+    final selectedMember = _members.firstWhere((m) => m['id'] == _selectedMemberId, orElse: () => {});
+    if (selectedMember['relationship'] == 'Father') {
+      setState(() {
+        _isPrivate = false; // Father is always public
+      });
+    }
   }
 
   Future<void> _loadMembers() async {
@@ -52,6 +62,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
         'dosage': securityService.encrypt(_dosageController.text),
         'frequency': _frequency,
         'stock_quantity': int.parse(_quantityController.text),
+        'is_private': _isPrivate,
       });
 
       // 2. Schedule Alarm (for demo we just schedule one for today/tomorrow at selected time)
@@ -102,16 +113,22 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
                     decoration: const InputDecoration(labelText: 'For Family Member', border: OutlineInputBorder()),
                     items: _members.map((m) => DropdownMenuItem(
                       value: m['id'] as String,
-                      child: Text(m['name']),
+                      child: Text('${m['name']} (${m['relationship']})'),
                     )).toList(),
-                    onChanged: (val) => setState(() => _selectedMemberId = val),
+                    onChanged: (val) {
+                      setState(() => _selectedMemberId = val);
+                      _updatePrivacyLock();
+                    },
                   ),
+                  const SizedBox(height: 20),
+                  _buildPrivacyToggle(),
                   const SizedBox(height: 20),
                   TextFormField(
                     controller: _nameController,
                     decoration: const InputDecoration(labelText: 'Medicine Name', border: OutlineInputBorder()),
                     validator: (v) => v!.isEmpty ? 'Required' : null,
                   ),
+
                   const SizedBox(height: 15),
                   TextFormField(
                     controller: _dosageController,

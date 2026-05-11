@@ -12,11 +12,13 @@ class MedicineDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        // For demo, we assume a family_id. In production, this comes from Auth provider.
-        future: medicineService.getMedicines('00000000-0000-0000-0000-000000000000'),
+        future: medicineService.getMedicines(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
           }
           if (!snapshot.hasData || snapshot.data!.isEmpty) {
             return _buildEmptyState(context);
@@ -61,6 +63,7 @@ class MedicineDashboard extends StatelessWidget {
 
   Widget _buildMedicineCard(BuildContext context, Map<String, dynamic> med) {
     bool lowStock = (med['stock_quantity'] ?? 0) <= (med['min_stock_alert'] ?? 5);
+    bool isPrivate = med['is_private'] ?? false;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
@@ -84,7 +87,16 @@ class MedicineDashboard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(med['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Row(
+                        children: [
+                          Text(med['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          if (isPrivate)
+                            const Padding(
+                              padding: EdgeInsets.only(left: 8.0),
+                              child: Icon(Icons.lock, size: 16, color: Colors.blue),
+                            ),
+                        ],
+                      ),
                       Text(med['family_members']?['name'] ?? 'Family Member', style: const TextStyle(color: Colors.black54)),
                     ],
                   ),

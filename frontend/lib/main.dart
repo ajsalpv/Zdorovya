@@ -12,36 +12,45 @@ import 'features/health/pages/trends_page.dart';
 import 'features/emergency/pages/emergency_page.dart';
 import 'features/health/pages/family_members_page.dart';
 import 'features/medical/pages/medical_vault_page.dart';
-import 'core/services/keep_alive_service.dart';
-import 'core/services/notification_service.dart';
-import 'features/auth/pages/security_lock_page.dart';
-
-final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+import 'core/services/profile_service.dart';
+import 'features/auth/pages/profile_selection_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Load environment variables
-  await dotenv.load(fileName: ".env");
-  
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+  try {
+    await dotenv.load(fileName: ".env");
+    
+    await Supabase.initialize(
+      url: dotenv.env['SUPABASE_URL']!,
+      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    );
 
-  // Ensure anonymous session for backend API calls
-  if (Supabase.instance.client.auth.currentSession == null) {
-    await Supabase.instance.client.auth.signInAnonymously();
+    // Initialize Profile Service
+    await profileService.init();
+
+    await notificationService.init();
+    keepAliveService.start();
+
+    // Still sign in anonymously to have a session for Supabase requests
+    _initializeAuth();
+
+  } catch (e) {
+    debugPrint("Initialization error: $e");
   }
 
-  // Initialize Notifications
-  await notificationService.init();
-
-  // Start Keep-Alive (Ping Render)
-  keepAliveService.start();
-
   runApp(const ZdorovyaApp());
+}
+
+Future<void> _initializeAuth() async {
+  try {
+    final auth = Supabase.instance.client.auth;
+    if (auth.currentSession == null) {
+      await auth.signInAnonymously().timeout(const Duration(seconds: 10));
+    }
+  } catch (e) {
+    debugPrint("Auth failed: $e");
+  }
 }
 
 class ZdorovyaApp extends StatelessWidget {
@@ -61,7 +70,6 @@ class ZdorovyaApp extends StatelessWidget {
           secondary: AppColors.secondary,
           surface: AppColors.surface,
           error: AppColors.alert,
-          brightness: Brightness.light,
         ),
         appBarTheme: AppBarTheme(
           backgroundColor: AppColors.primary,
@@ -70,23 +78,18 @@ class ZdorovyaApp extends StatelessWidget {
           centerTitle: false,
           titleTextStyle: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        textTheme: GoogleFonts.outfitTextTheme().copyWith(
-          displayLarge: TextStyle(color: AppColors.textPrimary),
-          bodyLarge: TextStyle(color: AppColors.textPrimary),
-          bodyMedium: TextStyle(color: AppColors.textPrimary),
-        ),
-        cardTheme: CardTheme(
-          color: Colors.white,
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        ),
+        textTheme: GoogleFonts.outfitTextTheme(),
       ),
-      home: const SecurityLockPage(
-        child: MainNavigation(),
-      ),
+      // If a profile is already active, go to Home, otherwise go to Profile Selection
+      initialRoute: profileService.activeProfile != null ? '/home' : '/profiles',
+      routes: {
+        '/profiles': (context) => const ProfileSelectionPage(),
+        '/home': (context) => const MainNavigation(),
+      },
     );
   }
 }
+
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -100,10 +103,10 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   
   final List<String> _titles = [
-    'Zdorovya Pharmacy',
-    'Daily Alarms',
+    'Family Pharmacy',
+    'Medicine Alarms',
     'Health Copilot',
-    'Health Trends',
+    'Family Trends',
     'Medical Vault'
   ];
   
@@ -117,14 +120,26 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final profile = profileService.activeProfile;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_titles[_selectedIndex]),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_titles[_selectedIndex], style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text('Viewing as ${profile?.name}', style: const TextStyle(fontSize: 11, color: Colors.white70)),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.family_restroom),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageFamilyPage())),
-            tooltip: 'Manage Family',
+            icon: CircleAvatar(
+              radius: 14,
+              backgroundColor: Colors.white24,
+              child: Icon(_getIconForRelationship(profile?.relationship), size: 16, color: Colors.white),
+            ),
+            onPressed: () => Navigator.pushReplacementNamed(context, '/profiles'),
+            tooltip: 'Switch Profile',
           ),
           const SizedBox(width: 10),
         ],
@@ -143,7 +158,17 @@ class _MainNavigationState extends State<MainNavigation> {
       ),
     );
   }
+
+  IconData _getIconForRelationship(String? rel) {
+    switch (rel) {
+      case 'Father': return Icons.face;
+      case 'Mother': return Icons.face_3;
+      default: return Icons.person;
+    }
+  }
+
 }
+
 
 // Temporary placeholders for structure
 class LoginPage extends StatelessWidget {

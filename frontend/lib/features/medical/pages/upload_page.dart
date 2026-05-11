@@ -24,19 +24,12 @@ class _UploadPageState extends State<UploadPage> {
   
   String? _selectedPatientId;
   List<Map<String, dynamic>> _members = [];
+  bool _isPrivate = false;
 
   @override
   void initState() {
     super.initState();
     _loadMembers();
-  }
-
-  Future<void> _loadMembers() async {
-    final members = await familyService.getMembers();
-    setState(() {
-      _members = members;
-      if (members.isNotEmpty) _selectedPatientId = members.first['id'];
-    });
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -94,6 +87,29 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
+  Future<void> _loadMembers() async {
+    final members = await familyService.getMembers();
+    setState(() {
+      _members = members;
+      // Default to active profile or first member
+      final activeId = profileService.activeProfile?.id;
+      _selectedPatientId = members.any((m) => m['id'] == activeId) 
+          ? activeId 
+          : (members.isNotEmpty ? members.first['id'] : null);
+      
+      _updatePrivacyLock();
+    });
+  }
+
+  void _updatePrivacyLock() {
+    final selectedMember = _members.firstWhere((m) => m['id'] == _selectedPatientId, orElse: () => {});
+    if (selectedMember['relationship'] == 'Father') {
+      setState(() {
+        _isPrivate = false; // Father is always public
+      });
+    }
+  }
+
   Future<void> _saveRecord() async {
     if (_extractedData == null) return;
     
@@ -104,14 +120,22 @@ class _UploadPageState extends State<UploadPage> {
 
       // 2. Save to Database
       final client = Supabase.instance.client;
+      final selectedMember = _members.firstWhere((m) => m['id'] == _selectedPatientId);
+      
       await client.from('medical_records').insert({
         'family_id': '00000000-0000-0000-0000-000000000000', 
         'patient_id': _selectedPatientId,
+        'uploader_id': profileService.activeProfile?.id,
         'type': _extractedData!['type'] ?? 'General',
         'file_url': fileUrl,
-        'metadata': _extractedData!,
+        'metadata': {
+          ..._extractedData!,
+          'patient_name': selectedMember['name'],
+          'patient_relationship': selectedMember['relationship'],
+        },
         'extracted_text': _extractedData!['summary'],
-        'embedding': _extractedData!['embedding'], // Save the vector embedding
+        'embedding': _extractedData!['embedding'],
+        'is_private': _isPrivate,
         'record_date': _extractedData!['date'] ?? DateTime.now().toIso8601String().split('T')[0],
       });
 
@@ -135,6 +159,7 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(title: const Text('Add Medical Record')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -142,13 +167,18 @@ class _UploadPageState extends State<UploadPage> {
           children: [
             DropdownButtonFormField<String>(
               value: _selectedPatientId,
-              decoration: const InputDecoration(labelText: 'For Patient', border: OutlineInputBorder()),
+              decoration: const InputDecoration(labelText: 'Who is this for?', border: OutlineInputBorder()),
               items: _members.map((m) => DropdownMenuItem(
                 value: m['id'] as String,
-                child: Text(m['name']),
+                child: Text('${m['name']} (${m['relationship']})'),
               )).toList(),
-              onChanged: (val) => setState(() => _selectedPatientId = val),
+              onChanged: (val) {
+                setState(() => _selectedPatientId = val);
+                _updatePrivacyLock();
+              },
             ),
+            const SizedBox(height: 20),
+            _buildPrivacyToggle(),
             const SizedBox(height: 20),
             _buildUploadCard(),
             const SizedBox(height: 30),
@@ -159,6 +189,50 @@ class _UploadPageState extends State<UploadPage> {
       ),
     );
   }
+
+  Widget _buildPrivacyToggle() {
+    final selectedMember = _members.firstWhere((m) => m['id'] == _selectedPatientId, orElse: () => {});
+    final isFather = selectedMember['relationship'] == 'Father';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isFather ? Colors.orange.withAlpha(20) : Colors.blue.withAlpha(20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isFather ? Colors.orange : Colors.blue.withAlpha(100)),
+      ),
+      child: Row(
+        children: [
+          Icon(isFather ? Icons.public : (_isPrivate ? Icons.lock : Icons.public), 
+               color: isFather ? Colors.orange : Colors.blue),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isPrivate ? 'Private Record' : 'Public Record',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  isFather 
+                    ? "Father's data is always public." 
+                    : (_isPrivate ? 'Only you and Admin can see this.' : 'Visible to all family members.'),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (!isFather)
+            Switch(
+              value: _isPrivate,
+              onChanged: (val) => setState(() => _isPrivate = val),
+            ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildUploadCard() {
     return Column(
