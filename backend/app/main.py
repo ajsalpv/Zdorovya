@@ -11,6 +11,13 @@ import uvicorn
 import asyncio
 import httpx
 import os
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -50,7 +57,6 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Zdorovya Backend shutting down")
 
 app = FastAPI(title="Zdorovya Backend", lifespan=lifespan)
-logger = logging.getLogger(__name__)
 
 # Security & Rate Limiting
 limiter = Limiter(key_func=get_remote_address)
@@ -87,16 +93,24 @@ def _get_cached_user(token: str):
     return supabase.auth.get_user(token)
 
 async def verify_token(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
+    if not authorization:
+        logger.warning("Missing Authorization header")
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    
+    if not authorization.startswith("Bearer "):
+        logger.warning(f"Invalid Authorization header format: {authorization[:15]}...")
+        raise HTTPException(status_code=401, detail="Invalid token format (expected Bearer)")
     
     token = authorization.split(" ")[1]
     try:
         user = _get_cached_user(token)
+        if not user:
+            logger.warning("Supabase returned null user for token")
+            raise HTTPException(status_code=401, detail="User session invalid")
         return user
     except Exception as e:
         logger.error(f"Token verification failed: {e}")
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
 
 @app.post("/api/v1/process-report")
 @limiter.limit("30/day")
@@ -115,11 +129,18 @@ async def process_report(
         mime_type = file.content_type
         
         # Call AI service with historical context
-        extracted_data = await ai_service.process_document(content, mime_type, patient_id=patient_id)
+        result = await ai_service.process_document(content, mime_type, patient_id=patient_id)
+        extracted_data = result["structured_data"]
+        embedding = result["embedding"]
+        
+        # NOTE: In a real scenario, you'd insert the record into Supabase here or in a separate service.
+        # If the frontend is responsible for the final 'insert', we should return the embedding to them.
+        # However, the user's UploadPage seems to do the insert. Let's return the embedding.
         
         return {
             "success": True,
-            "data": extracted_data
+            "data": extracted_data,
+            "embedding": embedding
         }
     except Exception as e:
         error_msg = str(e)

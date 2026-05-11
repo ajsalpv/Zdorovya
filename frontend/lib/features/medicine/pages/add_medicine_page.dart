@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/services/medicine_service.dart';
 import '../../../core/services/family_service.dart';
 import '../../../core/services/notification_service.dart';
+import '../../../core/services/security_service.dart';
 
 class AddMedicinePage extends StatefulWidget {
   const AddMedicinePage({super.key});
@@ -48,7 +49,7 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
         'family_id': familyId,
         'patient_id': _selectedMemberId,
         'name': _nameController.text,
-        'dosage': _dosageController.text,
+        'dosage': securityService.encrypt(_dosageController.text),
         'frequency': _frequency,
         'stock_quantity': int.parse(_quantityController.text),
       });

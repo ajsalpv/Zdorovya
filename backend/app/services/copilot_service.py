@@ -5,7 +5,7 @@ from typing import Annotated, List, TypedDict, Union, Dict, Any
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool
-from langgraph.graph import StateGraph, END, MessageGraph
+from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 from app.config import settings
@@ -21,41 +21,108 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_k
 @tool
 def query_medical_records(query_text: str, patient_id: str = None):
     """
-    Search for medical records based on a natural language query.
-    Returns metadata about reports like ECG, Blood Test, etc.
+    Search for medical records based on metadata like type (ECG, Blood Test).
     """
-    # In a real setup, we'd use semantic search or NL2SQL. 
-    # For now, we perform a structured search on metadata.
     try:
         req = supabase.from_('medical_records').select('*, family_members(name)')
         if patient_id:
             req = req.eq('patient_id', patient_id)
         
-        # Simple text search on type or extracted_text
         res = req.ilike('type', f'%{query_text}%').execute()
-        return json.dumps(res.data)
+        
+        from .security_service import security_service
+        records = res.data
+        for r in records:
+            if r.get('extracted_text'):
+                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+                
+        return json.dumps(records)
     except Exception as e:
         return f"Error querying records: {e}"
 
 @tool
-def query_medicine_compliance(medicine_name: str):
+def semantic_search_records(query_text: str, family_id: str = '00000000-0000-0000-0000-000000000000'):
     """
-    Check if a specific medicine has been taken regularly.
-    Returns a log of the last 5 reminder statuses.
+    Search for medical records using natural language semantic search.
+    Best for finding conceptual info (e.g. 'renal issues', 'cardiac history').
     """
     try:
-        # 1. Find medicine ID
-        med_res = supabase.from_('medicines').select('id, name').ilike('name', f'%{medicine_name}%').execute()
-        if not med_res.data:
-            return "Medicine not found."
+        from .ai_service import ai_service
+        import asyncio
         
-        med_id = med_res.data[0]['id']
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+        query_embedding = loop.run_until_complete(ai_service.embeddings_model.aembed_query(query_text))
         
-        # 2. Get history
-        history = supabase.from_('medicine_reminders').select('*').eq('medicine_id', med_id).order('created_at', desc=True).limit(5).execute()
-        return json.dumps(history.data)
+        res = supabase.rpc('match_medical_records', {
+            'query_embedding': query_embedding,
+            'match_threshold': 0.4,
+            'match_count': 5,
+            'p_family_id': family_id
+        }).execute()
+        
+        from .security_service import security_service
+        records = res.data
+        for r in records:
+            if r.get('extracted_text'):
+                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+        
+        return json.dumps(records)
     except Exception as e:
-        return f"Error checking compliance: {e}"
+        return f"Error in semantic search: {e}"
+
+@tool
+def analyze_health_trends(metric_type: str = "glucose"):
+    """
+    Retrieve logs for health metrics like glucose or blood pressure.
+    Returns the last 10 measurements to detect patterns.
+    """
+    try:
+        res = supabase.from_('health_metrics').select('*').order('recorded_at', desc=True).limit(10).execute()
+        return json.dumps(res.data)
+    except Exception as e:
+        return f"Error fetching trends: {e}"
+
+@tool
+def get_adherence_report():
+    """
+    Calculate medication adherence status from the latest logs.
+    """
+    try:
+        res = supabase.from_('medicine_reminders').select('status, medicine_name, scheduled_time').limit(20).execute()
+        return json.dumps(res.data)
+    except Exception as e:
+        return f"Error fetching adherence: {e}"
+
+@tool
+def emergency_summary(family_id: str = '00000000-0000-0000-0000-000000000000'):
+    """
+    CRITICAL: Instantly retrieve vital health data for emergencies.
+    Includes blood group, active conditions, and latest prescriptions.
+    """
+    try:
+        family = supabase.from_('family_members').select('*').limit(5).execute()
+        meds = supabase.from_('medicines').select('name, dosage').limit(10).execute()
+        records = supabase.from_('medical_records').select('type, extracted_text').order('record_date', desc=True).limit(3).execute()
+        
+        from .security_service import security_service
+        clean_records = []
+        for r in records.data:
+            if r.get('extracted_text'):
+                r['extracted_text'] = security_service.decrypt_data(r['extracted_text'])
+            clean_records.append(r)
+            
+        return json.dumps({
+            "vital_info": family.data,
+            "active_medications": meds.data,
+            "recent_medical_history": clean_records
+        })
+    except Exception as e:
+        return f"Error gathering emergency data: {e}"
 
 # --- LangGraph Setup ---
 
@@ -70,28 +137,26 @@ class CopilotAgent:
             temperature=0
         )
         
-        # Bind tools to LLM
-        self.tools = [query_medical_records, query_medicine_compliance]
+        self.tools = [
+            query_medical_records, 
+            semantic_search_records, 
+            analyze_health_trends, 
+            get_adherence_report,
+            emergency_summary
+        ]
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         
-        # Build Graph
         self.workflow = self._build_graph()
         self.memory = MemorySaver()
         self.app = self.workflow.compile(checkpointer=self.memory)
 
     def _build_graph(self):
         builder = StateGraph(AgentState)
-        
-        # Define Nodes
         builder.add_node("agent", self.call_model)
         builder.add_node("tools", ToolNode(self.tools))
         
-        # Define Edges
         builder.set_entry_point("agent")
-        builder.add_conditional_edges(
-            "agent",
-            self.should_continue,
-        )
+        builder.add_conditional_edges("agent", self.should_continue)
         builder.add_edge("tools", "agent")
         
         return builder
@@ -110,25 +175,29 @@ class CopilotAgent:
 
     async def chat(self, user_msg: str, session_id: str):
         config = {"configurable": {"thread_id": session_id}}
-        
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         system_prompt = SystemMessage(content=f"""
-        You are the Zdorovya Health Copilot. 
+        You are the Zdorovya Health Copilot, an advanced RAG-powered assistant.
         Current Date/Time: {current_time}
-        Always use this time to contextually understand user queries about 'today', 'last week', etc.
-        When users ask about medical history, use your tools to find the exact data.
+        
+        TOOLS GUIDE:
+        1. 'semantic_search_records': Use for vague or conceptual medical queries.
+        2. 'query_medical_records': Use for exact document type lookups.
+        3. 'analyze_health_trends': Use for sugar/BP pattern analysis.
+        4. 'get_adherence_report': Use to check if meds are being taken.
+        5. 'emergency_summary': Use ONLY when user mentions an emergency or needs vital info fast.
+        
+        Always explain medical terms simply. If records show abnormal values, highlight them clearly.
+        If no data is found, admit it and suggest what the user can upload.
         """)
 
-        # Run graph with system prompt prepended for time awareness
         result = await self.app.ainvoke(
             {"messages": [system_prompt, HumanMessage(content=user_msg)]}, 
             config
         )
         
         last_msg = result["messages"][-1]
-        
-        # Format response
-        # To support "embedded cards", we can instruct LLM to return a specific tag like [RECORD:id]
         return {
             "text": last_msg.content,
             "session_id": session_id

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/medicine_service.dart';
+import '../../../core/services/security_service.dart';
 import '../../medical/pages/upload_page.dart';
 import 'add_medicine_page.dart';
 import 'package:intl/intl.dart';
@@ -99,7 +100,7 @@ class MedicineDashboard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _statTile('Dosage', med['dosage'] ?? '--'),
+                _statTile('Dosage', securityService.decrypt(med['dosage'])),
                 _statTile('Frequency', med['frequency'] ?? '--'),
                 _statTile('Stock', '${med['stock_quantity']} left'),
               ],

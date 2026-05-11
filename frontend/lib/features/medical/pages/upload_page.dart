@@ -77,8 +77,11 @@ class _UploadPageState extends State<UploadPage> {
         ),
         patientId: _selectedPatientId,
       );
+      final data = response['data'];
+      final embedding = response['embedding'];
       setState(() {
-        _extractedData = response['data'];
+        _extractedData = Map<String, dynamic>.from(data);
+        _extractedData!['embedding'] = embedding;
         _isLoading = false;
       });
     } catch (e) {
@@ -108,6 +111,7 @@ class _UploadPageState extends State<UploadPage> {
         'file_url': fileUrl,
         'metadata': _extractedData!,
         'extracted_text': _extractedData!['summary'],
+        'embedding': _extractedData!['embedding'], // Save the vector embedding
         'record_date': _extractedData!['date'] ?? DateTime.now().toIso8601String().split('T')[0],
       });
 

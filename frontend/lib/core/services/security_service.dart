@@ -1,14 +1,14 @@
 import 'package:encrypt/encrypt.dart';
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SecurityService {
-  // same key as backend
-  static const String _keyStr = '7jRz9qV8nW3mP6sL5kX2yH4vJ0bE1fG98MpsTYw_AhxGPHof=';
   late final Fernet _fernet;
   late final Encrypter _encrypter;
 
   SecurityService() {
-    final key = Key.fromBase64(_keyStr);
+    final keyStr = dotenv.env['ENCRYPTION_KEY'] ?? 'fallback_key_if_needed';
+    final key = Key.fromBase64(keyStr);
     _fernet = Fernet(key);
     _encrypter = Encrypter(_fernet);
   }

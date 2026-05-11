@@ -60,6 +60,19 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     }
   }
 
+  final TextEditingController _pinController = TextEditingController();
+  bool _showPinField = false;
+
+  void _verifyPin() {
+    if (_pinController.text == '1234') { // For demo, default PIN is 1234
+      setState(() => _isAuthenticated = true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Incorrect PIN'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isAuthenticated) return widget.child;
@@ -67,35 +80,66 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     return Scaffold(
       backgroundColor: AppColors.primary,
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.lock_outline, size: 80, color: Colors.white),
-            const SizedBox(height: 24),
-            const Text(
-              'Zdorovya Locked',
-              style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Please authenticate to unlock your vault',
-              style: TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 40),
-            if (_isChecking)
-              const CircularProgressIndicator(color: Colors.white)
-            else
-              ElevatedButton.icon(
-                onPressed: _checkBiometrics,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Unlock Now'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 40),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 80, color: Colors.white),
+              const SizedBox(height: 24),
+              const Text(
+                'Zdorovya Locked',
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
               ),
-          ],
+              const SizedBox(height: 40),
+              if (_isChecking)
+                const CircularProgressIndicator(color: Colors.white)
+              else if (!_showPinField) ...[
+                ElevatedButton.icon(
+                  onPressed: _checkBiometrics,
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('Unlock with Biometrics'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _showPinField = true),
+                  child: const Text('Use Security PIN', style: TextStyle(color: Colors.white70)),
+                ),
+              ] else ...[
+                TextField(
+                  controller: _pinController,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 24, letterSpacing: 10),
+                  decoration: const InputDecoration(
+                    hintText: '••••',
+                    hintStyle: TextStyle(color: Colors.white30),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+                  ),
+                  onSubmitted: (_) => _verifyPin(),
+                ),
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: _verifyPin,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: AppColors.primary,
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  child: const Text('Verify PIN'),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _showPinField = false),
+                  child: const Text('Back to Biometrics', style: TextStyle(color: Colors.white70)),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

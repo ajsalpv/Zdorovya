@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any, TypedDict
 from pydantic import BaseModel, Field
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_core.messages import HumanMessage, BaseMessage
 from langgraph.graph import StateGraph, END
 from app.config import settings
@@ -37,9 +37,11 @@ class AgentState(TypedDict):
     mime_type: str
     raw_text: Optional[str]
     extracted_data: Optional[ExtractionResult]
+    embedding: Optional[List[float]]
     history_context: Optional[str]
     current_time: str
     iterations: int
+    errors: List[str]
 
 # --- AI Service with LangGraph ---
 
@@ -49,6 +51,10 @@ class AIService:
             model="gemini-2.0-flash",
             google_api_key=settings.gemini_api_key,
             temperature=0
+        )
+        self.embeddings_model = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=settings.gemini_api_key
         )
         # Initialize Supabase for history lookups
         from supabase import create_client
@@ -61,12 +67,14 @@ class AIService:
         # Add Nodes
         graph.add_node("vision_extraction", self.node_vision_extraction)
         graph.add_node("structured_parsing", self.node_structured_parsing)
+        graph.add_node("generate_embedding", self.node_generate_embedding)
         graph.add_node("validation", self.node_validation)
 
         # Build Flow
         graph.set_entry_point("vision_extraction")
         graph.add_edge("vision_extraction", "structured_parsing")
-        graph.add_edge("structured_parsing", "validation")
+        graph.add_edge("structured_parsing", "generate_embedding")
+        graph.add_edge("generate_embedding", "validation")
         
         # Conditional Edge for Validation
         graph.add_conditional_edges(
@@ -86,7 +94,6 @@ class AIService:
         """Extract raw text and visual context using Gemini Vision."""
         logger.info("Starting Vision Extraction Node")
         
-        # Prepare multimodal content for LangChain/Gemini
         import base64
         base64_image = base64.b64encode(state['file_content']).decode('utf-8')
         
@@ -119,7 +126,14 @@ class AIService:
         """
         
         result = await structured_llm.ainvoke(prompt)
-        return {"extracted_data": result, "iterations": state['iterations'] + 1}
+        return {"extracted_data": result, "iterations": state.get('iterations', 0) + 1}
+
+    async def node_generate_embedding(self, state: AgentState):
+        """Generate vector embedding for the extracted text and summary."""
+        logger.info("Starting Embedding Generation Node")
+        text_to_embed = f"{state['extracted_data'].summary}\n{state['raw_text']}"
+        embedding = await self.embeddings_model.aembed_query(text_to_embed)
+        return {"embedding": embedding}
 
     async def node_validation(self, state: AgentState):
         """Validate if the extraction is complete and logical."""
@@ -134,7 +148,7 @@ class AIService:
         return {"errors": errors}
 
     def should_continue(self, state: AgentState):
-        if state['errors'] and state['iterations'] < 3:
+        if state.get('errors') and state.get('iterations', 0) < 3:
             return "continue"
         return "end"
 
@@ -142,7 +156,6 @@ class AIService:
         """Fetch 3 months of medical history for context."""
         try:
             three_months_ago = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
-            # Select relevant history from Supabase
             res = self.supabase.from_('medical_records').select('type, extracted_text, record_date')\
                 .eq('patient_id', patient_id)\
                 .gte('record_date', three_months_ago)\
@@ -151,7 +164,11 @@ class AIService:
             if not res.data:
                 return "No previous records found in the last 3 months."
             
-            history = "\n".join([f"- {r['record_date']}: {r['type']} - {r['extracted_text']}" for r in res.data])
+            from .security_service import security_service
+            history = "\n".join([
+                f"- {r['record_date']}: {r['type']} - {security_service.decrypt_data(r['extracted_text'])}" 
+                for r in res.data
+            ])
             return f"Patient History (Past 3 Months):\n{history}"
         except Exception as e:
             logger.error(f"Error fetching history: {e}")
@@ -167,31 +184,34 @@ class AIService:
             "mime_type": mime_type,
             "raw_text": None,
             "extracted_data": None,
+            "embedding": None,
             "history_context": history,
             "current_time": current_time,
             "errors": [],
             "iterations": 0
         }
         
-        # Execute Graph
-        # In actual execution, we'd pass the file_content correctly to the vision node
-        # For now, we'll wrap the logic to handle the multimodal call properly
-        
-        # SIMPLIFIED FOR PRODUCTION RELIABILITY
         final_state = await self.workflow.ainvoke(initial_state)
         
         if final_state["extracted_data"]:
-            data = final_state["extracted_data"].model_dump()
+            data_dict = final_state["extracted_data"].model_dump()
             
             # Encrypt sensitive fields for safety
             from .security_service import security_service
-            if data.get('summary'):
-                data['summary'] = security_service.encrypt_data(data['summary'])
-            for med in data.get('medicines', []):
+            raw_summary = data_dict.get('summary', '')
+            if raw_summary:
+                data_dict['summary'] = security_service.encrypt_data(raw_summary)
+            for med in data_dict.get('medicines', []):
                 if med.get('dosage'):
                     med['dosage'] = security_service.encrypt_data(med['dosage'])
             
-            return data
+            # Add embedding to the response so main.py can save it if needed, 
+            # or we save it here if we had the family_id.
+            # Usually better to return it to the caller.
+            return {
+                "structured_data": data_dict,
+                "embedding": final_state["embedding"]
+            }
         else:
             raise Exception("AI failed to extract data: " + ", ".join(final_state["errors"]))
 

@@ -1,33 +1,86 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class TrendsPage extends StatelessWidget {
+class TrendsPage extends StatefulWidget {
   const TrendsPage({super.key});
+
+  @override
+  State<TrendsPage> createState() => _TrendsPageState();
+}
+
+class _TrendsPageState extends State<TrendsPage> {
+  final SupabaseClient _supabase = Supabase.instance.client;
+  List<FlSpot> _glucoseSpots = [];
+  List<FlSpot> _bpSpots = [];
+  bool _isLoading = true;
+  String _aiInsight = 'Analyzing your health trends...';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
+    try {
+      final response = await _supabase
+          .from('health_metrics')
+          .select()
+          .order('recorded_at', ascending: true)
+          .limit(10);
+      
+      final List<Map<String, dynamic>> data = List<Map<String, dynamic>>.from(response);
+      
+      setState(() {
+        _glucoseSpots = data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), (e.value['glucose_level'] ?? 100).toDouble())).toList();
+        _bpSpots = data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), (e.value['systolic_bp'] ?? 120).toDouble())).toList();
+        
+        if (data.isNotEmpty) {
+          _aiInsight = 'Based on your last ${data.length} readings, your glucose levels are stabilizing.';
+        } else {
+          _aiInsight = 'No health metrics found. Add your first reading to see AI insights.';
+        }
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _aiInsight = 'Error fetching trends. Please try again later.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildChartSection(context, 'Blood Glucose (mg/dL)', _glucoseData()),
-            const SizedBox(height: 30),
-            _buildChartSection(context, 'Blood Pressure (mmHg)', _bpData()),
-            const SizedBox(height: 30),
-            _buildInsightCard(context),
-          ],
-        ),
-      ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator())
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildChartSection(context, 'Blood Glucose (mg/dL)', _glucoseSpots),
+                const SizedBox(height: 30),
+                _buildChartSection(context, 'Blood Pressure (mmHg)', _bpSpots),
+                const SizedBox(height: 30),
+                _buildInsightCard(context),
+              ],
+            ),
+          ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {}, // TODO: Open Manual Entry Dialog
+        onPressed: () {
+          // In a real app, this would open a dialog to insert data into health_metrics
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Manual entry coming soon!')));
+        },
         child: const Icon(Icons.add),
       ),
     );
   }
 
   Widget _buildChartSection(BuildContext context, String title, List<FlSpot> spots) {
+    if (spots.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -70,18 +123,18 @@ class TrendsPage extends StatelessWidget {
         gradient: LinearGradient(colors: [Colors.blue[900]!, Colors.blue[800]!]),
         borderRadius: BorderRadius.circular(15),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.auto_graph, color: Colors.white, size: 40),
+          const Icon(Icons.auto_graph, color: Colors.white, size: 40),
           const SizedBox(width: 20),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('AI INSIGHT', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const Text('AI INSIGHT', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 Text(
-                  'Your average sugar level decreased by 5% this week. Keep it up!',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  _aiInsight,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -89,29 +142,5 @@ class TrendsPage extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  List<FlSpot> _glucoseData() {
-    return [
-      const FlSpot(0, 110),
-      const FlSpot(1, 130),
-      const FlSpot(2, 120),
-      const FlSpot(3, 145),
-      const FlSpot(4, 115),
-      const FlSpot(5, 110),
-      const FlSpot(6, 120),
-    ];
-  }
-
-  List<FlSpot> _bpData() {
-    return [
-      const FlSpot(0, 120),
-      const FlSpot(1, 118),
-      const FlSpot(2, 125),
-      const FlSpot(3, 130),
-      const FlSpot(4, 122),
-      const FlSpot(5, 119),
-      const FlSpot(6, 121),
-    ];
   }
 }

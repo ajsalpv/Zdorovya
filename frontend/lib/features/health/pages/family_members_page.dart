@@ -100,37 +100,39 @@ class _ManageFamilyPageState extends State<ManageFamilyPage> {
   Future<void> _showAddMemberDialog() async {
     return showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Family Member'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: 'Full Name'),
-            ),
-            DropdownButtonFormField<String>(
-              value: _relationship,
-              items: ['Parent', 'Spouse', 'Child', 'Sibling', 'Grandparent']
-                  .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                  .toList(),
-              onChanged: (val) => setState(() => _relationship = val!),
-              decoration: const InputDecoration(labelText: 'Relationship'),
-            ),
-            DropdownButtonFormField<String>(
-              value: _bloodGroup,
-              items: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
-                  .map((bg) => DropdownMenuItem(value: bg, child: Text(bg)))
-                  .toList(),
-              onChanged: (val) => setState(() => _bloodGroup = val!),
-              decoration: const InputDecoration(labelText: 'Blood Group'),
-            ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Family Member'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(labelText: 'Full Name'),
+              ),
+              DropdownButtonFormField<String>(
+                value: _relationship,
+                items: ['Parent', 'Spouse', 'Child', 'Sibling', 'Grandparent']
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (val) => setDialogState(() => _relationship = val!),
+                decoration: const InputDecoration(labelText: 'Relationship'),
+              ),
+              DropdownButtonFormField<String>(
+                value: _bloodGroup,
+                items: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+                    .map((bg) => DropdownMenuItem(value: bg, child: Text(bg)))
+                    .toList(),
+                onChanged: (val) => setDialogState(() => _bloodGroup = val!),
+                decoration: const InputDecoration(labelText: 'Blood Group'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            ElevatedButton(onPressed: _addMember, child: const Text('Add')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(onPressed: _addMember, child: const Text('Add')),
-        ],
       ),
     );
   }

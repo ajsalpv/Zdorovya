@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'core/theme/app_colors.dart';
 import 'features/medical/pages/upload_page.dart';
 import 'features/medicine/pages/medicine_dashboard.dart';
@@ -20,11 +21,19 @@ final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterL
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Load environment variables
+  await dotenv.load(fileName: ".env");
+  
   // Initialize Supabase
   await Supabase.initialize(
-    url: 'https://jlrzzrhxqvpzrltolkbf.supabase.co',
-    anonKey: 'sb_publishable_HUvRPGCOGYuspW6vMpsTYw_AhxGPHof',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // Ensure anonymous session for backend API calls
+  if (Supabase.instance.client.auth.currentSession == null) {
+    await Supabase.instance.client.auth.signInAnonymously();
+  }
 
   // Initialize Notifications
   await notificationService.init();
