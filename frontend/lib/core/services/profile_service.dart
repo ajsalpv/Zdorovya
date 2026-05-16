@@ -1,29 +1,44 @@
-import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/profile.dart';
 
 class ProfileService {
   static const String _activeProfileKey = 'active_profile_id';
+  final SupabaseClient _supabase = Supabase.instance.client;
   
-  // Hardcoded Profiles as per requirements
-  final List<UserProfile> familyProfiles = [
-    UserProfile(id: '00000000-0000-0000-0000-000000000001', name: 'Ajsal', relationship: 'Brother', isAdmin: true),
-    UserProfile(id: '00000000-0000-0000-0000-000000000002', name: 'Father', relationship: 'Father'),
-    UserProfile(id: '00000000-0000-0000-0000-000000000003', name: 'Mother', relationship: 'Mother'),
-    UserProfile(id: '00000000-0000-0000-0000-000000000004', name: 'Ansil', relationship: 'Brother'),
-    UserProfile(id: '00000000-0000-0000-0000-000000000005', name: 'Ashhal', relationship: 'Brother'),
-  ];
-
-
-
+  List<UserProfile> familyProfiles = [];
   UserProfile? _activeProfile;
-
   UserProfile? get activeProfile => _activeProfile;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Fetch members from DB instead of hardcoding
+    try {
+      final familyId = dotenv.env['FAMILY_ID'];
+      final response = await _supabase
+          .from('family_members')
+          .select()
+          .eq('family_id', familyId ?? '')
+          .order('name');
+      
+      familyProfiles = (response as List).map((json) {
+        return UserProfile(
+          id: json['id'],
+          name: json['name'],
+          relationship: json['relationship'],
+          // Ajsal is the admin (hardcoded name as per user request)
+          isAdmin: json['name'] == 'Ajsal',
+        );
+      }).toList();
+    } catch (e) {
+      print('Error fetching profiles: $e');
+      // Fallback or handle error
+    }
+
     final profileId = prefs.getString(_activeProfileKey);
-    if (profileId != null) {
+    if (profileId != null && familyProfiles.isNotEmpty) {
       _activeProfile = familyProfiles.firstWhere(
         (p) => p.id == profileId,
         orElse: () => familyProfiles[0],

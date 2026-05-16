@@ -1,9 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'profile_service.dart';
 
 class MedicineService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final String _familyId = '00000000-0000-0000-0000-000000000000';
+  final String _familyId = dotenv.env['FAMILY_ID'] ?? '';
 
   Future<List<Map<String, dynamic>>> getMedicines() async {
     final profile = profileService.activeProfile;

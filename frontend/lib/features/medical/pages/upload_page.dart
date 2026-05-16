@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../core/services/api_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -124,7 +125,7 @@ class _UploadPageState extends State<UploadPage> {
       final selectedMember = _members.firstWhere((m) => m['id'] == _selectedPatientId);
       
       await client.from('medical_records').insert({
-        'family_id': '00000000-0000-0000-0000-000000000000', 
+        'family_id': dotenv.env['FAMILY_ID'] ?? '', 
         'patient_id': _selectedPatientId,
         'uploader_id': profileService.activeProfile?.id,
         'type': _extractedData!['type'] ?? 'General',

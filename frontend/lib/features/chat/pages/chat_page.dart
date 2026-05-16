@@ -32,9 +32,13 @@ class _ChatPageState extends State<ChatPage> {
       });
     } catch (e) {
       setState(() => _isTyping = false);
+      String errorMsg = e.toString();
+      if (errorMsg.contains('429')) {
+        errorMsg = 'AI Daily Quota reached. I am sleeping now, ask me tomorrow! 😴';
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
         );
       }
     }
@@ -58,10 +62,6 @@ class _ChatPageState extends State<ChatPage> {
           ),
           _buildInputArea(),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
-        child: const Icon(Icons.attach_file),
       ),
     );
   }
@@ -103,6 +103,11 @@ class _ChatPageState extends State<ChatPage> {
             child: TextField(
               controller: _controller,
               decoration: InputDecoration(
+                prefixIcon: IconButton(
+                  icon: const Icon(Icons.add_a_photo_outlined, size: 20),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
+                  tooltip: 'Attach Report',
+                ),
                 hintText: 'Ask about health...',
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
                 filled: true,

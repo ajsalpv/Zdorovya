@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/family_service.dart';
 import '../../../core/services/profile_service.dart';
+import '../../../core/services/medical_vault_service.dart';
 import '../../../core/theme/app_colors.dart';
+import 'package:intl/intl.dart';
 
 class FamilySocialPage extends StatefulWidget {
   const FamilySocialPage({super.key});
@@ -104,14 +106,55 @@ class _FamilySocialPageState extends State<FamilySocialPage> {
             Text(profile.name, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
             Text(profile.relationship, style: const TextStyle(fontSize: 16, color: Colors.grey)),
             const Divider(height: 40, indent: 40, endIndent: 40),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Text('MEDICAL HISTORY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey, letterSpacing: 1.2)),
+            ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                children: [
-                  _buildStatTile(Icons.favorite, 'Health Score', '92%'),
-                  _buildStatTile(Icons.bloodtype, 'Blood Group', 'O+'),
-                  _buildStatTile(Icons.history, 'Recent Activity', 'Blood test uploaded yesterday'),
-                ],
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: medicalVaultService.getMemberRecordsStream(profile.id),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final records = snapshot.data ?? [];
+                  if (records.isEmpty) {
+                    return const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.folder_off_outlined, size: 40, color: Colors.grey),
+                          SizedBox(height: 10),
+                          Text('No public records shared yet.', style: TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    );
+                  }
+                  
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: records.length,
+                    itemBuilder: (context, index) {
+                      final r = records[index];
+                      return Card(
+                        elevation: 0,
+                        color: Colors.grey[50],
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        child: ListTile(
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(color: AppColors.primary.withAlpha(20), shape: BoxShape.circle),
+                            child: Icon(Icons.description_outlined, color: AppColors.primary, size: 20),
+                          ),
+                          title: Text(r['type'] ?? 'Report', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Text(r['record_date'] ?? 'No date', style: const TextStyle(fontSize: 12)),
+                          trailing: const Icon(Icons.chevron_right, size: 16),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
             ),
             if (profileService.isAdmin && profile.id == profileService.activeProfile?.id)

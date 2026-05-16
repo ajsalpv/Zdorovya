@@ -1,37 +1,42 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/profile_service.dart';
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class MedicalVaultService {
   final SupabaseClient _supabase = Supabase.instance.client;
-  final String _familyId = '00000000-0000-0000-0000-000000000000';
+  final String _familyId = dotenv.env['FAMILY_ID'] ?? '';
 
   Stream<List<Map<String, dynamic>>> getRecordsStream() {
+    return _filterStream(null);
+  }
+
+  Stream<List<Map<String, dynamic>>> getMemberRecordsStream(String memberId) {
+    return _filterStream(memberId);
+  }
+
+  Stream<List<Map<String, dynamic>>> _filterStream(String? targetMemberId) {
     final profile = profileService.activeProfile;
     if (profile == null) return Stream.value([]);
 
-    final query = _supabase
+    var stream = _supabase
         .from('medical_records')
-        .stream(primaryKey: ['id'])
-        .eq('family_id', _familyId);
+        .stream(primaryKey: ['id']);
 
-    return query.map((records) {
+    return stream.map((records) {
       return records.where((record) {
+        // Filter by family_id and optionally targetMemberId manually in stream
+        if (record['family_id'] != _familyId) return false;
+        if (targetMemberId != null && record['patient_id'] != targetMemberId) return false;
+
         final isPrivate = record['is_private'] ?? false;
         final patientId = record['patient_id'];
-        final relationship = record['metadata']?['patient_relationship']; // We should store this
+        final relationship = record['metadata']?['patient_relationship'];
 
-        // Admin sees everything
         if (profile.isAdmin) return true;
-
-        // Owner sees their own private data
         if (patientId == profile.id) return true;
-
-        // Everyone sees public data
         if (!isPrivate) return true;
-
-        // Father's data is always public (handled by isPrivate being false or explicit check)
         if (relationship == 'Father') return true;
-
         return false;
       }).toList()..sort((a, b) => (b['record_date'] ?? '').compareTo(a['record_date'] ?? ''));
     });

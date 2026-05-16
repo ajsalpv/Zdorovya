@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../core/services/medicine_service.dart';
 import '../../../core/services/family_service.dart';
 import '../../../core/services/notification_service.dart';
@@ -52,11 +53,11 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
 
     setState(() => _isLoading = true);
     try {
-      final familyId = '00000000-0000-0000-0000-000000000000';
+      final String _familyId = dotenv.env['FAMILY_ID'] ?? '';
       
       // 1. Save Medicine
       await medicineService.addMedicine({
-        'family_id': familyId,
+        'family_id': _familyId,
         'patient_id': _selectedMemberId,
         'name': _nameController.text,
         'dosage': securityService.encrypt(_dosageController.text),

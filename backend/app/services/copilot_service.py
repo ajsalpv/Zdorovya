@@ -27,13 +27,11 @@ def _get_privacy_filter(active_profile_id: str):
     return is_admin
 
 @tool
-def query_medical_records(query_text: str, active_profile_id: str, patient_id: str = None):
+def query_medical_records(query_text: str, active_profile_id: str, is_admin: bool, patient_id: str = None):
     """
     Search for medical records based on metadata like type (ECG, Blood Test).
-    REQUIRES active_profile_id for privacy filtering.
     """
     try:
-        is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
         
         req = supabase.from_('medical_records').select('*, family_members(name, relationship)')
         
@@ -70,7 +68,7 @@ def query_medical_records(query_text: str, active_profile_id: str, patient_id: s
         return f"Error querying records: {e}"
 
 @tool
-def semantic_search_records(query_text: str, active_profile_id: str, family_id: str = '00000000-0000-0000-0000-000000000000'):
+def semantic_search_records(query_text: str, active_profile_id: str, is_admin: bool, family_id: str = settings.family_id):
     """
     Search for medical records using natural language semantic search.
     Best for finding conceptual info (e.g. 'renal issues', 'cardiac history').
@@ -120,13 +118,11 @@ def semantic_search_records(query_text: str, active_profile_id: str, family_id: 
         return f"Error in semantic search: {e}"
 
 @tool
-def get_medicines_status(active_profile_id: str):
+def get_medicines_status(active_profile_id: str, is_admin: bool):
     """
     Retrieve active medicines and their details. 
-    Respects privacy settings.
     """
     try:
-        is_admin = active_profile_id == '00000000-0000-0000-0000-000000000001'
         res = supabase.from_('medicines').select('*, family_members(name, relationship)').execute()
         
         filtered = []
@@ -146,6 +142,7 @@ def get_medicines_status(active_profile_id: str):
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], "The conversation history"]
     active_profile_id: str
+    is_admin: bool
 
 class CopilotAgent:
     def __init__(self):
@@ -185,14 +182,14 @@ class CopilotAgent:
         return END
 
     async def call_model(self, state: AgentState):
-        # We need to inject the active_profile_id into the tool calls
         messages = state['messages']
         response = await self.llm_with_tools.ainvoke(messages)
         
-        # Inject active_profile_id into tool calls if they miss it
+        # Inject context into tool calls
         if response.tool_calls:
             for tc in response.tool_calls:
                 tc['args']['active_profile_id'] = state['active_profile_id']
+                tc['args']['is_admin'] = state['is_admin']
                 
         return {"messages": [response]}
 
@@ -200,21 +197,22 @@ class CopilotAgent:
         config = {"configurable": {"thread_id": session_id}}
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # Get profile name for better context
-        profile_names = {
-            '00000000-0000-0000-0000-000000000001': 'Ajsal',
-            '00000000-0000-0000-0000-000000000002': 'Father',
-            '00000000-0000-0000-0000-000000000003': 'Mother',
-            '00000000-0000-0000-0000-000000000004': 'Ansil',
-            '00000000-0000-0000-0000-000000000005': 'Ashhal',
-        }
-
-        profile_name = profile_names.get(active_profile_id, "Family Member")
+        # Get profile name from DB dynamically
+        try:
+            res = supabase.from_('family_members').select('name').eq('id', active_profile_id).single().execute()
+            profile_name = res.data.get('name', 'Family Member')
+        except:
+            profile_name = "Family Member"
         
+        # Determine if Admin (by name 'Ajsal')
+        is_admin = (profile_name == 'Ajsal')
+
         system_prompt = SystemMessage(content=f"""
         You are the Zdorovya Health Copilot, an advanced RAG-powered assistant for a private family system.
         Current Date/Time: {current_time}
         Talking to: {profile_name} (ID: {active_profile_id})
+        Family Context ID: {settings.family_id}
+        Admin Status: {is_admin}
         
         PRIVACY RULES:
         1. You have been provided with filtered data based on the user's role.
@@ -226,13 +224,14 @@ class CopilotAgent:
         - Medicine queries: Check doses, identifies missed doses, and predict stock.
         - Natural language search: Find anything across reports.
         
-        If the user is the Admin, they have full access. If they are a Member, they can only see their own records and public records of others.
+        Admin has full access. Members can only see their own records and public records of others.
         """)
 
         result = await self.app.ainvoke(
             {
                 "messages": [system_prompt, HumanMessage(content=user_msg)],
-                "active_profile_id": active_profile_id
+                "active_profile_id": active_profile_id,
+                "is_admin": is_admin
             }, 
             config
         )

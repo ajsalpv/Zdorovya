@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart' as dio;
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'profile_service.dart';
 
 class ChatService {
-  final String _baseUrl = 'https://zdorovya.onrender.com';
+  final String _baseUrl = dotenv.env['BACKEND_URL'] ?? 'https://zdorovya.onrender.com';
   final dio.Dio _dio = dio.Dio();
   final String _sessionId = Uuid().v4();
 

@@ -130,7 +130,6 @@ class _MainNavigationState extends State<MainNavigation> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(_titles[_selectedIndex], style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('Viewing as ${profile?.name}', style: const TextStyle(fontSize: 11, color: Colors.white70)),
           ],
         ),
         actions: [
