@@ -13,6 +13,8 @@ import 'features/emergency/pages/emergency_page.dart';
 import 'features/health/pages/family_members_page.dart';
 import 'features/medical/pages/medical_vault_page.dart';
 import 'core/services/profile_service.dart';
+import 'core/services/notification_service.dart';
+import 'core/services/keep_alive_service.dart';
 import 'features/auth/pages/profile_selection_page.dart';
 
 void main() async {
@@ -106,7 +108,7 @@ class _MainNavigationState extends State<MainNavigation> {
     'Family Pharmacy',
     'Medicine Alarms',
     'Health Copilot',
-    'Family Trends',
+    'Family Circle',
     'Medical Vault'
   ];
   
@@ -114,7 +116,7 @@ class _MainNavigationState extends State<MainNavigation> {
     const MedicineDashboard(),
     const RemindersPage(),
     const ChatPage(),
-    const TrendsPage(),
+    const FamilySocialPage(),
     const MedicalVaultPage(),
   ];
 
@@ -132,6 +134,11 @@ class _MainNavigationState extends State<MainNavigation> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.add_a_photo_outlined),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
+            tooltip: 'Upload Report',
+          ),
           IconButton(
             icon: CircleAvatar(
               radius: 14,
@@ -152,7 +159,7 @@ class _MainNavigationState extends State<MainNavigation> {
           NavigationDestination(icon: Icon(Icons.medication_outlined), label: 'Pharmacy'),
           NavigationDestination(icon: Icon(Icons.notifications_active_outlined), label: 'Alarms'),
           NavigationDestination(icon: Icon(Icons.smart_toy_outlined), label: 'Copilot'),
-          NavigationDestination(icon: Icon(Icons.analytics_outlined), label: 'Trends'),
+          NavigationDestination(icon: Icon(Icons.people_outline), label: 'Circle'),
           NavigationDestination(icon: Icon(Icons.folder_shared_outlined), label: 'Vault'),
         ],
       ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/medicine_service.dart';
+import '../../../core/services/profile_service.dart';
 import 'package:intl/intl.dart';
 
 class RemindersPage extends StatelessWidget {
@@ -9,8 +10,7 @@ class RemindersPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        // For demo, assumes a family_id. 
-        stream: medicineService.getPendingReminders('00000000-0000-0000-0000-000000000000'),
+        stream: medicineService.getPendingRemindersStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -79,8 +79,9 @@ class RemindersPage extends StatelessWidget {
   }
 
   Future<void> _markAsTaken(BuildContext context, String id) async {
+    final profileId = profileService.activeProfile?.id ?? '';
     try {
-      await medicineService.markDoseAsTaken(id);
+      await medicineService.markDoseAsTaken(id, profileId);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Dose recorded. Family notified!')),

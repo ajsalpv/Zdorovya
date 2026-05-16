@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/chat_service.dart';
+import '../../medical/pages/upload_page.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -57,6 +58,10 @@ class _ChatPageState extends State<ChatPage> {
           ),
           _buildInputArea(),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadPage())),
+        child: const Icon(Icons.attach_file),
       ),
     );
   }

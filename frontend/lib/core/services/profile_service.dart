@@ -44,6 +44,16 @@ class ProfileService {
   }
 
   bool get isAdmin => _activeProfile?.isAdmin ?? false;
+
+  Future<String> getAdminPin() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('admin_pin') ?? '1234';
+  }
+
+  Future<void> setAdminPin(String newPin) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('admin_pin', newPin);
+  }
 }
 
 final profileService = ProfileService();

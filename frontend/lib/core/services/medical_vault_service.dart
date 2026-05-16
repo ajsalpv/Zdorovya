@@ -9,10 +9,10 @@ class MedicalVaultService {
     final profile = profileService.activeProfile;
     if (profile == null) return Stream.value([]);
 
-    var query = _supabase.from('medical_records').stream(primaryKey: ['id']);
-    
-    // Filter by family
-    query = query.eq('family_id', _familyId);
+    final query = _supabase
+        .from('medical_records')
+        .stream(primaryKey: ['id'])
+        .eq('family_id', _familyId);
 
     return query.map((records) {
       return records.where((record) {

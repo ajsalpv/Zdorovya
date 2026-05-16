@@ -1,180 +1,180 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/family_service.dart';
+import '../../../core/services/profile_service.dart';
 import '../../../core/theme/app_colors.dart';
 
-class ManageFamilyPage extends StatefulWidget {
-  const ManageFamilyPage({super.key});
+class FamilySocialPage extends StatefulWidget {
+  const FamilySocialPage({super.key});
 
   @override
-  State<ManageFamilyPage> createState() => _ManageFamilyPageState();
+  State<FamilySocialPage> createState() => _FamilySocialPageState();
 }
 
-class _ManageFamilyPageState extends State<ManageFamilyPage> {
-  bool _isAdmin = true; // For demo, default to true. Real app uses Supabase Auth roles.
-  bool _isLoading = false;
-
-  final TextEditingController _nameController = TextEditingController();
-  String _relationship = 'Parent';
-  String _bloodGroup = 'O+';
-
+class _FamilySocialPageState extends State<FamilySocialPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Family'),
-        actions: [
-          Switch(
-            value: _isAdmin,
-            onChanged: (val) => setState(() => _isAdmin = val),
-            activeColor: Colors.white,
+      backgroundColor: Colors.white,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: 120,
+            floating: true,
+            flexibleSpace: FlexibleSpaceBar(
+              title: Text('Family Circle', style: GoogleFonts.outfit(color: Colors.black, fontWeight: FontWeight.bold)),
+              centerTitle: false,
+            ),
+            backgroundColor: Colors.white,
+            elevation: 0,
           ),
-          const Center(child: Text('Admin Mode  ', style: TextStyle(fontSize: 10))),
-        ],
-      ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: familyService.getMembers(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return _buildEmptyState();
-          }
-
-          final members = snapshot.data!;
-          return ListView.builder(
+          SliverPadding(
             padding: const EdgeInsets.all(16),
-            itemCount: members.length,
-            itemBuilder: (context, index) {
-              final member = members[index];
-              return _buildMemberCard(member);
-            },
-          );
-        },
-      ),
-      floatingActionButton: _isAdmin
-          ? FloatingActionButton.extended(
-              onPressed: _showAddMemberDialog,
-              label: const Text('Add Member'),
-              icon: const Icon(Icons.person_add),
-            )
-          : null,
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Opacity(opacity: 0.2, child: Icon(Icons.people_outline, size: 100)),
-          const SizedBox(height: 20),
-          const Text('No family members added.'),
-          if (_isAdmin)
-            TextButton(onPressed: _showAddMemberDialog, child: const Text('Add the first member')),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 16,
+                crossAxisSpacing: 16,
+                childAspectRatio: 0.8,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final profile = profileService.familyProfiles[index];
+                  return _buildSocialCard(profile);
+                },
+                childCount: profileService.familyProfiles.length,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMemberCard(Map<String, dynamic> member) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primary.withAlpha(50),
-          child: Text(member['name'][0].toUpperCase(), style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+  Widget _buildSocialCard(var profile) {
+    return GestureDetector(
+      onTap: () => _showProfileDetail(profile),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withAlpha(10), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
         ),
-        title: Text(member['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('${member['relationship']} • ${member['blood_group'] ?? 'Blood Group N/A'}'),
-        trailing: _isAdmin
-            ? IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: () => _deleteMember(member['id']),
-              )
-            : null,
-      ),
-    );
-  }
-
-  Future<void> _showAddMemberDialog() async {
-    return showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Add Family Member'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-              ),
-              DropdownButtonFormField<String>(
-                value: _relationship,
-                items: ['Parent', 'Spouse', 'Child', 'Sibling', 'Grandparent']
-                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
-                    .toList(),
-                onChanged: (val) => setDialogState(() => _relationship = val!),
-                decoration: const InputDecoration(labelText: 'Relationship'),
-              ),
-              DropdownButtonFormField<String>(
-                value: _bloodGroup,
-                items: ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
-                    .map((bg) => DropdownMenuItem(value: bg, child: Text(bg)))
-                    .toList(),
-                onChanged: (val) => setDialogState(() => _bloodGroup = val!),
-                decoration: const InputDecoration(labelText: 'Blood Group'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            ElevatedButton(onPressed: _addMember, child: const Text('Add')),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 40,
+              backgroundColor: AppColors.primary.withAlpha(30),
+              child: Icon(_getIconForRelationship(profile.relationship), size: 40, color: AppColors.primary),
+            ),
+            const SizedBox(height: 12),
+            Text(profile.name, style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(profile.relationship, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _addMember() async {
-    if (_nameController.text.isEmpty) return;
-    
-    Navigator.pop(context);
-    setState(() => _isLoading = true);
-    try {
-      await familyService.addMember({
-        'name': _nameController.text,
-        'relationship': _relationship,
-        'blood_group': _bloodGroup,
-      });
-      _nameController.clear();
-      setState(() {}); // Refresh list
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  void _showProfileDetail(var profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 30),
+            CircleAvatar(
+              radius: 60,
+              backgroundColor: AppColors.primary.withAlpha(30),
+              child: Icon(_getIconForRelationship(profile.relationship), size: 60, color: AppColors.primary),
+            ),
+            const SizedBox(height: 20),
+            Text(profile.name, style: GoogleFonts.outfit(fontSize: 28, fontWeight: FontWeight.bold)),
+            Text(profile.relationship, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+            const Divider(height: 40, indent: 40, endIndent: 40),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                children: [
+                  _buildStatTile(Icons.favorite, 'Health Score', '92%'),
+                  _buildStatTile(Icons.bloodtype, 'Blood Group', 'O+'),
+                  _buildStatTile(Icons.history, 'Recent Activity', 'Blood test uploaded yesterday'),
+                ],
+              ),
+            ),
+            if (profileService.isAdmin && profile.id == profileService.activeProfile?.id)
+              Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: ElevatedButton.icon(
+                  onPressed: _showChangePinDialog,
+                  icon: const Icon(Icons.lock_reset),
+                  label: const Text('Change Admin Password'),
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
-  Future<void> _deleteMember(String id) async {
-    final confirmed = await showDialog<bool>(
+  Widget _buildStatTile(IconData icon, String label, String value) {
+    return ListTile(
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(label, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+      trailing: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  void _showChangePinDialog() {
+    final controller = TextEditingController();
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove Member?'),
-        content: const Text('This will hide them from the family list.'),
+        title: const Text('Set Admin Password'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Enter new 4-digit PIN'),
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          obscureText: true,
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.length == 4) {
+                await profileService.setAdminPin(controller.text);
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Admin PIN updated!')));
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
+  }
 
-    if (confirmed == true) {
-      await familyService.deactivateMember(id);
-      setState(() {});
+  IconData _getIconForRelationship(String rel) {
+    switch (rel) {
+      case 'Father': return Icons.face;
+      case 'Mother': return Icons.face_3;
+      default: return Icons.person;
     }
   }
 }

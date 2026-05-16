@@ -8,6 +8,7 @@ import 'dart:io';
 import '../../../core/services/storage_service.dart';
 import '../../../core/services/family_service.dart';
 import '../../../core/services/security_service.dart';
+import '../../../core/services/profile_service.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});

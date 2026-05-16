@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/biometric_service.dart';
+import '../../../core/services/profile_service.dart';
 import '../../../core/theme/app_colors.dart';
 
 class SecurityLockPage extends StatefulWidget {
@@ -54,9 +55,9 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
   final TextEditingController _pinController = TextEditingController();
   bool _showPinField = false;
 
-  void _verifyPin() {
-    // Admin default PIN: 1234
-    if (_pinController.text == '1234') {
+  Future<void> _verifyPin() async {
+    final storedPin = await profileService.getAdminPin();
+    if (_pinController.text == storedPin) {
       _handleSuccess();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

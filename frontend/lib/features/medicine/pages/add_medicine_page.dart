@@ -167,4 +167,47 @@ class _AddMedicinePageState extends State<AddMedicinePage> {
           ),
     );
   }
+
+  Widget _buildPrivacyToggle() {
+    final selectedMember = _members.firstWhere((m) => m['id'] == _selectedMemberId, orElse: () => {});
+    final isFather = selectedMember['relationship'] == 'Father';
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isFather ? Colors.orange.withAlpha(20) : Colors.blue.withAlpha(20),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isFather ? Colors.orange : Colors.blue.withAlpha(100)),
+      ),
+      child: Row(
+        children: [
+          Icon(isFather ? Icons.public : (_isPrivate ? Icons.lock : Icons.public), 
+               color: isFather ? Colors.orange : Colors.blue),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isPrivate ? 'Private Medicine' : 'Public Medicine',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  isFather 
+                    ? "Father's medicine is always public." 
+                    : (_isPrivate ? 'Only you and Admin can see this.' : 'Visible to all family members.'),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          if (!isFather)
+            Switch(
+              value: _isPrivate,
+              onChanged: (val) => setState(() => _isPrivate = val),
+            ),
+        ],
+      ),
+    );
+  }
 }

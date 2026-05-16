@@ -117,8 +117,7 @@ async def verify_token(authorization: str = Header(None)):
 async def process_report(
     request: Request,
     file: UploadFile = File(...),
-    patient_id: str = Form(None),
-    user_profile = Depends(verify_token)
+    patient_id: str = Form(None)
 ):
     """
     Endpoint to process a medical document (Image/PDF).
@@ -158,16 +157,21 @@ class ChatRequest(BaseModel):
 
 @app.post("/api/v1/copilot/chat")
 @limiter.limit("100/day")
-async def chat_with_copilot(req: ChatRequest, request: Request, user_profile = Depends(verify_token)):
+async def chat_with_copilot(req: ChatRequest, request: Request):
     """
     Conversational AI interface for family health.
     """
+    logger.info(f"Chat request from profile: {req.active_profile_id}, session: {req.session_id}")
     try:
+        if not req.message or len(req.message.strip()) == 0:
+            raise HTTPException(status_code=400, detail="Empty message")
+            
         response = await copilot_agent.chat(req.message, req.session_id, req.active_profile_id)
+        logger.info(f"Copilot responded successfully for session {req.session_id}")
         return response
 
     except Exception as e:
-        logger.error(f"Chat error: {e}")
+        logger.error(f"Chat error for profile {req.active_profile_id}: {e}", exc_info=True)
         error_msg = str(e)
         if "429" in error_msg or "ResourceExhausted" in error_msg:
              raise HTTPException(
