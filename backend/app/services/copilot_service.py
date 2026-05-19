@@ -249,11 +249,10 @@ class CopilotAgent:
                     )
                     last_msg = result["messages"][-1]
                     return {"text": last_msg.content, "session_id": session_id}
-
                 except Exception as e:
                     error_msg = str(e)
-                    if ("429" in error_msg or "ResourceExhausted" in error_msg) and attempt == 0 and settings.groq_api_key:
-                        logger.warning("Gemini quota hit, switching to Groq fallback")
+                    if attempt == 0 and settings.groq_api_key:
+                        logger.warning(f"Gemini API call failed ({error_msg}), switching to Groq fallback")
                         self._use_groq = True
                         self._rebuild_graph()
                         continue

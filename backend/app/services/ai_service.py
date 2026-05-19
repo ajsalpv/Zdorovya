@@ -50,7 +50,7 @@ class AIService:
         self._use_groq = False
         self._init_llm()
         self.embeddings_model = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004",
+            model="text-embedding-004",
             google_api_key=settings.gemini_api_key
         )
         # Initialize Supabase for history lookups
@@ -221,8 +221,8 @@ class AIService:
 
             except Exception as e:
                 error_msg = str(e)
-                if ("429" in error_msg or "ResourceExhausted" in error_msg) and attempt == 0 and settings.groq_api_key:
-                    logger.warning("Gemini quota hit during document processing, switching to Groq")
+                if attempt == 0 and settings.groq_api_key:
+                    logger.warning(f"Gemini call failed during document processing ({error_msg}), switching to Groq")
                     self._use_groq = True
                     self._init_llm()
                     self.workflow = self._build_graph()

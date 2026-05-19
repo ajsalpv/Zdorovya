@@ -18,7 +18,6 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
   bool _isAuthenticated = false;
   bool _obscureText = true;
 
-  // SHA-256 of "Ajsal247@gmail.com"
   static const String _hashedAdminPassword =
       '17182b9991fd551690a6e7506f80436d69e29d2763d4dd37c56d96759730d466';
 
@@ -43,7 +42,7 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
       _passwordController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Incorrect admin password'),
+          content: Text('Incorrect password'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -88,11 +87,11 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
                       color: AppColors.primary.withAlpha(30),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.admin_panel_settings, size: 80, color: AppColors.primary),
+                    child: Icon(Icons.security, size: 80, color: AppColors.primary),
                   ),
                   const SizedBox(height: 30),
                   Text(
-                    'Admin Access Required',
+                    'Verification Required',
                     style: GoogleFonts.outfit(
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
@@ -101,7 +100,7 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Enter password to verify your identity',
+                    'Please confirm your identity to continue',
                     style: GoogleFonts.outfit(
                       fontSize: 16,
                       color: AppColors.textSecondary,
