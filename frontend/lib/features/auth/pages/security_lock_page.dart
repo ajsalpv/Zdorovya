@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/biometric_service.dart';
-import '../../../core/services/profile_service.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/app_colors.dart';
 
 class SecurityLockPage extends StatefulWidget {
@@ -13,14 +14,13 @@ class SecurityLockPage extends StatefulWidget {
 }
 
 class _SecurityLockPageState extends State<SecurityLockPage> {
+  final TextEditingController _passwordController = TextEditingController();
   bool _isAuthenticated = false;
-  bool _isChecking = false;
+  bool _obscureText = true;
 
-  @override
-  void initState() {
-    super.initState();
-    _checkBiometrics();
-  }
+  // SHA-256 of "Ajsal2026"
+  static const String _hashedAdminPassword =
+      '552641adabdb2b2d90bf4b3b312cc44d9769e249f1abd016a148d831849a13f8';
 
   void _handleSuccess() {
     if (widget.onAuthenticated != null) {
@@ -30,38 +30,22 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     }
   }
 
-  Future<void> _checkBiometrics() async {
-    if (_isChecking) return;
-    setState(() => _isChecking = true);
+  void _verifyPassword() {
+    final password = _passwordController.text.trim();
+    if (password.isEmpty) return;
 
-    try {
-      final bool canCheck = await biometricService.canCheckBiometrics();
-      if (!canCheck) {
-        _handleSuccess();
-        return;
-      }
-      
-      final bool success = await biometricService.authenticate();
-      if (success) {
-        _handleSuccess();
-      }
-    } catch (e) {
-      debugPrint('Biometric error: $e');
-    } finally {
-      if (mounted) setState(() => _isChecking = false);
-    }
-  }
+    final bytes = utf8.encode(password);
+    final hash = sha256.convert(bytes).toString();
 
-  final TextEditingController _pinController = TextEditingController();
-  bool _showPinField = false;
-
-  Future<void> _verifyPin() async {
-    final storedPin = await profileService.getAdminPin();
-    if (_pinController.text == storedPin) {
+    if (hash == _hashedAdminPassword) {
       _handleSuccess();
     } else {
+      _passwordController.clear();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Incorrect PIN'), backgroundColor: Colors.redAccent),
+        const SnackBar(
+          content: Text('Incorrect admin password'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
     }
   }
@@ -71,80 +55,103 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
     if (_isAuthenticated && widget.child != null) return widget.child!;
 
     return Scaffold(
-      backgroundColor: AppColors.primary,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: widget.onAuthenticated != null ? IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.pop(context),
-        ) : null,
+        ),
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.lock_outline, size: 80, color: Colors.white),
-              const SizedBox(height: 24),
-              const Text(
-                'Admin Access Required',
-                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 40),
-              if (_isChecking)
-                const CircularProgressIndicator(color: Colors.white)
-              else if (!_showPinField) ...[
-                ElevatedButton.icon(
-                  onPressed: _checkBiometrics,
-                  icon: const Icon(Icons.fingerprint),
-                  label: const Text('Unlock with Biometrics'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primary,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () => setState(() => _showPinField = true),
-                  child: const Text('Use Security PIN', style: TextStyle(color: Colors.white70)),
-                ),
-              ] else ...[
-                TextField(
-                  controller: _pinController,
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  autofocus: true,
-                  style: const TextStyle(color: Colors.white, fontSize: 32, letterSpacing: 10),
-                  decoration: const InputDecoration(
-                    hintText: '••••',
-                    hintStyle: TextStyle(color: Colors.white30),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white, width: 2)),
-                  ),
-                  onSubmitted: (_) => _verifyPin(),
-                ),
-                const SizedBox(height: 40),
-                ElevatedButton(
-                  onPressed: _verifyPin,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: AppColors.primary,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Verify Admin PIN', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _showPinField = false),
-                  child: const Text('Back to Biometrics', style: TextStyle(color: Colors.white70)),
-                ),
-              ],
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.background,
+              AppColors.primary.withAlpha(20),
             ],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withAlpha(30),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.admin_panel_settings, size: 80, color: AppColors.primary),
+                  ),
+                  const SizedBox(height: 30),
+                  Text(
+                    'Admin Access Required',
+                    style: GoogleFonts.outfit(
+                      fontSize: 26,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Enter password to verify your identity',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscureText,
+                    decoration: InputDecoration(
+                      hintText: 'Enter Password',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureText ? Icons.visibility_off : Icons.visibility,
+                          color: Colors.grey,
+                        ),
+                        onPressed: () => setState(() => _obscureText = !_obscureText),
+                      ),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _verifyPassword(),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _verifyPassword,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text('Verify', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

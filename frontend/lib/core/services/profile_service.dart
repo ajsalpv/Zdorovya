@@ -11,8 +11,18 @@ class ProfileService {
   UserProfile? _activeProfile;
   UserProfile? get activeProfile => _activeProfile;
 
+  static const String _appVersionKey = 'app_version';
+  static const String currentVersion = '1.2.0';
+
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // Clear active profile on fresh install or update to force asking who is using the app
+    final storedVersion = prefs.getString(_appVersionKey);
+    if (storedVersion != currentVersion) {
+      await prefs.remove(_activeProfileKey);
+      await prefs.setString(_appVersionKey, currentVersion);
+    }
     
     // Fetch members from DB instead of hardcoding
     try {
