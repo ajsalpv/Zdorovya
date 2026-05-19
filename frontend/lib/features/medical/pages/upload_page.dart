@@ -336,14 +336,17 @@ class _UploadPageState extends State<UploadPage> {
           Text(securityService.decrypt(data['summary']), style: TextStyle(color: Colors.black.withAlpha(204))),
           const SizedBox(height: 20),
         ],
-        if (data['medicines'] != null && (data['medicines'] as List).isNotEmpty) ...[
+        if (data['medicines'] != null && data['medicines'] is List && (data['medicines'] as List).isNotEmpty) ...[
           Text('Medicines Found', style: Theme.of(context).textTheme.titleMedium),
-          ...(data['medicines'] as List).map((m) => ListTile(
-            leading: const Icon(Icons.medication),
-            title: Text(m['name']),
-            subtitle: Text('${securityService.decrypt(m['dosage'])} - ${m['frequency']}'),
-            trailing: m['price'] != null ? Text(m['price'].toString()) : null,
-          )),
+          ...(data['medicines'] as List).map((m) {
+            if (m is! Map) return const SizedBox.shrink();
+            return ListTile(
+              leading: const Icon(Icons.medication),
+              title: Text(m['name']?.toString() ?? 'Unknown'),
+              subtitle: Text('${securityService.decrypt(m['dosage'])} - ${m['frequency']?.toString() ?? ''}'),
+              trailing: m['price'] != null ? Text(m['price'].toString()) : null,
+            );
+          }),
         ],
         const SizedBox(height: 30),
         SizedBox(

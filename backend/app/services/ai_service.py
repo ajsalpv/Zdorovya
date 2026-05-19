@@ -50,7 +50,7 @@ class AIService:
         self._use_groq = False
         self._init_llm()
         self.embeddings_model = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
+            model="models/text-embedding-004",
             google_api_key=settings.gemini_api_key
         )
         # Initialize Supabase for history lookups

@@ -1,5 +1,7 @@
 import json
 import logging
+import uuid
+import contextvars
 from datetime import datetime
 from typing import Annotated, List, TypedDict
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -16,15 +18,48 @@ logger = logging.getLogger(__name__)
 # --- Supabase Setup ---
 supabase: Client = create_client(settings.supabase_url, settings.supabase_anon_key)
 
-# --- Tools (privacy enforced via is_admin param injected by agent) ---
+# --- Context Variables for Tools ---
+active_profile_id_var = contextvars.ContextVar("active_profile_id", default="")
+is_admin_var = contextvars.ContextVar("is_admin", default=False)
+
+def is_valid_uuid(val: str) -> bool:
+    try:
+        uuid.UUID(str(val))
+        return True
+    except (ValueError, TypeError):
+        return False
+
+# --- Tools (privacy enforced via context variables) ---
 
 @tool
-def query_medical_records(query_text: str, active_profile_id: str, is_admin: bool, patient_id: str = None):
+def query_medical_records(query_text: str, patient_id: str = None):
     """Search for medical records by type (ECG, Blood Test, Prescription, etc.)."""
+    active_profile_id = active_profile_id_var.get()
+    is_admin = is_admin_var.get()
     try:
         req = supabase.from_('medical_records').select('*, family_members(name, relationship)')
+        
         if patient_id:
-            req = req.eq('patient_id', patient_id)
+            if not is_valid_uuid(patient_id):
+                # Try to lookup member by name
+                logger.info(f"Looking up patient member by name: {patient_id}")
+                member_res = supabase.from_('family_members').select('id').ilike('name', f"%{patient_id}%").execute()
+                if member_res.data:
+                    patient_id = member_res.data[0]['id']
+                    logger.info(f"Resolved patient name to ID: {patient_id}")
+                else:
+                    # Try to lookup by relationship
+                    rel_res = supabase.from_('family_members').select('id').ilike('relationship', f"%{patient_id}%").execute()
+                    if rel_res.data:
+                        patient_id = rel_res.data[0]['id']
+                        logger.info(f"Resolved patient relationship to ID: {patient_id}")
+                    else:
+                        logger.warning(f"Could not resolve patient_id: {patient_id}")
+                        patient_id = None
+            
+            if patient_id:
+                req = req.eq('patient_id', patient_id)
+
         res = req.execute()
 
         filtered = []
@@ -48,8 +83,10 @@ def query_medical_records(query_text: str, active_profile_id: str, is_admin: boo
 
 
 @tool
-def semantic_search_records(query_text: str, active_profile_id: str, is_admin: bool, family_id: str = settings.family_id):
+def semantic_search_records(query_text: str, family_id: str = settings.family_id):
     """Search medical records using natural language (e.g. 'renal issues', 'cardiac history')."""
+    active_profile_id = active_profile_id_var.get()
+    is_admin = is_admin_var.get()
     try:
         from .ai_service import ai_service
         import asyncio
@@ -85,8 +122,10 @@ def semantic_search_records(query_text: str, active_profile_id: str, is_admin: b
 
 
 @tool
-def get_medicines_status(active_profile_id: str, is_admin: bool):
+def get_medicines_status():
     """Retrieve active medicines and their details."""
+    active_profile_id = active_profile_id_var.get()
+    is_admin = is_admin_var.get()
     try:
         res = supabase.from_('medicines').select('*, family_members(name, relationship)').execute()
 
@@ -159,16 +198,13 @@ class CopilotAgent:
     async def call_model(self, state: AgentState):
         messages = state['messages']
         response = await self.llm_with_tools.ainvoke(messages)
-
-        if response.tool_calls:
-            for tc in response.tool_calls:
-                tc['args']['active_profile_id'] = state['active_profile_id']
-                tc['args']['is_admin'] = state['is_admin']
-
         return {"messages": [response]}
 
     async def chat(self, user_msg: str, session_id: str, active_profile_id: str):
-        config = {"configurable": {"thread_id": session_id}}
+        config = {
+            "configurable": {"thread_id": session_id},
+            "recursion_limit": 50
+        }
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Get profile name from DB dynamically
@@ -180,6 +216,10 @@ class CopilotAgent:
 
         # Admin check by name (only hardcoded value per user request)
         is_admin = (profile_name == 'Ajsal')
+
+        # Set context variables for tools
+        active_token = active_profile_id_var.set(active_profile_id)
+        admin_token = is_admin_var.set(is_admin)
 
         system_prompt = SystemMessage(content=f"""
         You are the Zdorovya Health Copilot, an AI health assistant for a private family.
@@ -196,27 +236,31 @@ class CopilotAgent:
         """)
 
         # Try Gemini first, fall back to Groq on quota errors
-        for attempt in range(2):
-            try:
-                result = await self.app.ainvoke(
-                    {
-                        "messages": [system_prompt, HumanMessage(content=user_msg)],
-                        "active_profile_id": active_profile_id,
-                        "is_admin": is_admin
-                    },
-                    config
-                )
-                last_msg = result["messages"][-1]
-                return {"text": last_msg.content, "session_id": session_id}
+        try:
+            for attempt in range(2):
+                try:
+                    result = await self.app.ainvoke(
+                        {
+                            "messages": [system_prompt, HumanMessage(content=user_msg)],
+                            "active_profile_id": active_profile_id,
+                            "is_admin": is_admin
+                        },
+                        config
+                    )
+                    last_msg = result["messages"][-1]
+                    return {"text": last_msg.content, "session_id": session_id}
 
-            except Exception as e:
-                error_msg = str(e)
-                if ("429" in error_msg or "ResourceExhausted" in error_msg) and attempt == 0 and settings.groq_api_key:
-                    logger.warning("Gemini quota hit, switching to Groq fallback")
-                    self._use_groq = True
-                    self._rebuild_graph()
-                    continue
-                raise
+                except Exception as e:
+                    error_msg = str(e)
+                    if ("429" in error_msg or "ResourceExhausted" in error_msg) and attempt == 0 and settings.groq_api_key:
+                        logger.warning("Gemini quota hit, switching to Groq fallback")
+                        self._use_groq = True
+                        self._rebuild_graph()
+                        continue
+                    raise
+        finally:
+            active_profile_id_var.reset(active_token)
+            is_admin_var.reset(admin_token)
 
 
 copilot_agent = CopilotAgent()
