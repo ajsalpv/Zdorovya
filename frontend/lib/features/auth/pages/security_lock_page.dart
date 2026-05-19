@@ -18,9 +18,9 @@ class _SecurityLockPageState extends State<SecurityLockPage> {
   bool _isAuthenticated = false;
   bool _obscureText = true;
 
-  // SHA-256 of "Ajsal2026"
+  // SHA-256 of "Ajsal247@gmail.com"
   static const String _hashedAdminPassword =
-      '552641adabdb2b2d90bf4b3b312cc44d9769e249f1abd016a148d831849a13f8';
+      '17182b9991fd551690a6e7506f80436d69e29d2763d4dd37c56d96759730d466';
 
   void _handleSuccess() {
     if (widget.onAuthenticated != null) {
