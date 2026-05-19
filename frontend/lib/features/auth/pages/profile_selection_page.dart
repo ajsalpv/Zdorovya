@@ -5,8 +5,69 @@ import '../../../core/services/profile_service.dart';
 import '../../../core/theme/app_colors.dart';
 import 'security_lock_page.dart';
 
-class ProfileSelectionPage extends StatelessWidget {
+class ProfileSelectionPage extends StatefulWidget {
   const ProfileSelectionPage({super.key});
+
+  @override
+  State<ProfileSelectionPage> createState() => _ProfileSelectionPageState();
+}
+
+class _ProfileSelectionPageState extends State<ProfileSelectionPage> {
+  final TextEditingController _nameController = TextEditingController();
+  bool _isLoading = false;
+
+  void _handleLogin() async {
+    final typedName = _nameController.text.trim();
+    if (typedName.isEmpty) return;
+
+    setState(() => _isLoading = true);
+
+    // If profiles somehow didn't load, try reloading them
+    if (profileService.familyProfiles.isEmpty) {
+      await profileService.init();
+    }
+
+    setState(() => _isLoading = false);
+
+    // Find profile by name (case-insensitive)
+    final profile = profileService.familyProfiles.where(
+      (p) => p.name.toLowerCase() == typedName.toLowerCase()
+    ).firstOrNull;
+
+    if (profile != null) {
+      if (profile.isAdmin) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SecurityLockPage(
+                onAuthenticated: () async {
+                  await profileService.setActiveProfile(profile);
+                  if (context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/home');
+                  }
+                },
+              ),
+            ),
+          );
+        }
+      } else {
+        await profileService.setActiveProfile(profile);
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("User '$typedName' not found. Please try again."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,126 +86,73 @@ class ProfileSelectionPage extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 60),
-              Text(
-                'Who is using Zdorovya?',
-                style: GoogleFonts.outfit(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Select your profile to continue',
-                style: GoogleFonts.outfit(
-                  fontSize: 16,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 60),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 30,
-                    crossAxisSpacing: 30,
-                    childAspectRatio: 0.85,
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.health_and_safety, size: 80, color: AppColors.primary),
+                  const SizedBox(height: 30),
+                  Text(
+                    'Welcome to Zdorovya',
+                    style: GoogleFonts.outfit(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  itemCount: profileService.familyProfiles.length,
-                  itemBuilder: (context, index) {
-                    final profile = profileService.familyProfiles[index];
-                    return _ProfileCard(profile: profile);
-                  },
-                ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Enter your name to continue',
+                    style: GoogleFonts.outfit(
+                      fontSize: 16,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                  TextField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      hintText: 'e.g., Ajsal, Father, Mother...',
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                      prefixIcon: const Icon(Icons.person_outline, color: Colors.grey),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _handleLogin(),
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleLogin,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: _isLoading 
+                          ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('Continue', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
     );
-  }
-}
-
-class _ProfileCard extends StatelessWidget {
-  final UserProfile profile;
-  const _ProfileCard({required this.profile});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        if (profile.isAdmin) {
-          // Admin requires PIN lock
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => SecurityLockPage(
-                onAuthenticated: () async {
-                  await profileService.setActiveProfile(profile);
-                  if (context.mounted) {
-                    Navigator.pushReplacementNamed(context, '/home');
-                  }
-                },
-              ),
-            ),
-          );
-        } else {
-          // Others enter directly
-          await profileService.setActiveProfile(profile);
-          if (context.mounted) {
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        }
-      },
-      child: Column(
-        children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(13),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Icon(
-                  _getIconForRelationship(profile.relationship),
-                  size: 50,
-                  color: profile.isAdmin ? AppColors.primary : AppColors.secondary,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            profile.name,
-            style: GoogleFonts.outfit(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  IconData _getIconForRelationship(String rel) {
-    switch (rel) {
-      case 'Admin': return Icons.admin_panel_settings;
-      case 'Father': return Icons.face;
-      case 'Mother': return Icons.face_3;
-      case 'Brother': return Icons.person;
-      default: return Icons.account_circle;
-    }
   }
 }

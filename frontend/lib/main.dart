@@ -9,7 +9,6 @@ import 'features/medicine/pages/medicine_dashboard.dart';
 import 'features/reminders/pages/reminders_page.dart';
 import 'features/chat/pages/chat_page.dart';
 import 'features/health/pages/trends_page.dart';
-import 'features/emergency/pages/emergency_page.dart';
 import 'features/health/pages/family_members_page.dart';
 import 'features/medical/pages/medical_vault_page.dart';
 import 'core/services/profile_service.dart';
@@ -28,14 +27,14 @@ void main() async {
       anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
     );
 
+    // Initialize Auth first so that Supabase has a valid session for RLS
+    await _initializeAuth();
+
     // Initialize Profile Service
     await profileService.init();
 
     await notificationService.init();
     keepAliveService.start();
-
-    // Still sign in anonymously to have a session for Supabase requests
-    _initializeAuth();
 
   } catch (e) {
     debugPrint("Initialization error: $e");
@@ -173,64 +172,4 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
-}
-
-
-// Temporary placeholders for structure
-class LoginPage extends StatelessWidget {
-  const LoginPage({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.shield_moon, size: 80, color: Color(0xFF1E88E5)),
-                const SizedBox(height: 20),
-                const Text('Zdorovya', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                Text('Secure Family Vault', style: TextStyle(color: Colors.black.withAlpha(153))),
-                const SizedBox(height: 40),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 50),
-                      backgroundColor: const Color(0xFF1E88E5),
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('Login with Email/OTP'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Positioned(
-            bottom: 40,
-            left: 20,
-            right: 20,
-            child: TextButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmergencyPage())),
-              icon: const Icon(Icons.emergency, color: Colors.redAccent),
-              label: const Text('EMERGENCY SOS ACCESS', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class DashboardPage extends StatelessWidget {
-  const DashboardPage({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Family Vault')),
-      body: const Center(child: Text('Coming Soon')),
-    );
-  }
 }
